@@ -14,10 +14,13 @@ change.** Research history: `reference/ncaaf-matchup-runbook.md`.
 - After any pipeline change, re-run the acceptance checks in `BUILD_SPEC.md` §3. Unexplained moves = stop.
 - Ask John before changing any modeling choice, threshold, coefficient, colour meaning or caveat wording.
 - Honesty (BUILD_SPEC §7): the model does **not** beat the closing line — never present Δ, leans or
-  Shootout as an edge; keep the "model unreliable here" flag; every ROI carries the unverified
-  flat-pricing assumption; floor numbers describe the posted total's level, not the matchup.
+  Shootout as an edge; keep the "model unreliable here" flag.
+- Scope (John, Oct 24 2026): the board scores games from data inputs, like the NHL and MLB sites. No
+  alt-line / bought-down-total / floor / price-ladder / price-check features — those scripts
+  (`ncaaf_minpts.py`, `ncaaf_floor.py`, `ncaaf_bothfloor.py`, `ncaaf_bigfav.py`) are research-only
+  and are not run by `rebuild_all.sh`.
 - Spreads are home-perspective: negative = home favoured. Market implied: home (T−S)/2, away (T+S)/2.
 - Any projection of a past week must use that week's as-of league average (`mu_pts`), never today's.
-- `pipeline/data/tail_model.json` is a committed input; everything else in `pipeline/data/` is generated.
+- Everything in `pipeline/data/` is generated; nothing there is committed.
 - Build before kickoff — ESPN drops a game's odds from the live scoreboard once it starts.
 - Colour: red = pushes points up, blue = pushes points down, gray = average; every coloured cell prints its number.

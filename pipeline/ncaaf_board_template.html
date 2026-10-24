@@ -81,11 +81,6 @@ td.sep,th.sep{border-left:1px solid var(--line)}
 .shoot{display:inline-flex;align-items:baseline;gap:6px;font:600 13px/1 "Barlow Condensed",sans-serif;letter-spacing:.6px;text-transform:uppercase;padding:4px 8px;border-radius:2px;color:var(--ink)}
 .shoot b{font-size:18px}
 .read2{padding:0 12px 8px;font-size:12px;color:var(--ink2)}
-.calc{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:8px 12px;border-top:1px solid var(--line2);font-size:13px}
-.calc input{width:66px;font:13px "IBM Plex Mono",monospace;padding:4px 6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:3px}
-.calc .v{font-weight:600}
-.calc .good{color:var(--good)}.calc .bad{color:var(--hot-ink)}
-.calc label{color:var(--ink3);font-size:12px}
 .so table{min-width:820px}
 .so th{cursor:default}
 .so td.mu{font:600 19px/1.15 "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.4px;text-align:left}
@@ -136,8 +131,6 @@ footer{color:var(--ink3);font-size:12px;padding:20px 18px;border-top:1px solid v
       <button class="btn" data-sort="etotal" aria-pressed="false">Edge vs posted total</button>
       <button class="btn" data-sort="espread" aria-pressed="false">Edge vs posted spread</button>
       <button class="btn" data-sort="shoot" aria-pressed="false">Shootout score</button>
-      <button class="btn" data-sort="oread" aria-pressed="false">Over read</button>
-      <button class="btn" data-sort="bfloor" aria-pressed="false">Both-teams floor</button>
       <button class="btn" data-sort="kick" aria-pressed="false">Kickoff</button>
     </div>
     <div class="group"><label for="minedge">Min edge vs market (pts)</label><input type="number" id="minedge" value="0" min="0" step="0.5"></div>
@@ -167,13 +160,11 @@ footer{color:var(--ink3);font-size:12px;padding:20px 18px;border-top:1px solid v
   <div class="controls">
     <div class="group"><label>Sort</label>
       <button class="btn" data-ssort="shoot" aria-pressed="true">Shootout (scoring)</button>
-      <button class="btn" data-ssort="edge" aria-pressed="false">Historical over-bet edge</button>
       <button class="btn" data-ssort="kick" aria-pressed="false">Kickoff</button>
     </div>
     <div class="group"><button class="btn" id="so-lined" aria-pressed="false">Only games with a posted total</button></div>
   </div>
   <div class="card"><table id="sotable"></table></div>
-  <div id="so-cal"></div>
 </section>
 
 <section id="view-rank" class="rank" hidden>
@@ -192,7 +183,6 @@ const $ = s => document.querySelector(s);
 const fmt = (x,d=1) => (x==null||isNaN(x)) ? '—' : (Math.round(x*Math.pow(10,d))/Math.pow(10,d)).toFixed(d);
 const sgn = (x,d=1) => (x==null||isNaN(x)) ? '—' : (x>0?'+':'') + fmt(x,d);
 const pct = x => (x==null||isNaN(x)) ? '—' : (x*100).toFixed(1)+'%';
-const fairOdds = p => (p==null||isNaN(p)||p<=0||p>=1) ? '—' : (p>=0.5 ? '−'+Math.round(100*p/(1-p)) : '+'+Math.round(100*(1-p)/p));
 const B = DATA.backtest, C = DATA.coef, MU = DATA.league_mu;
 const W = {pts:1, sr:1, xr:1, home:1};
 
@@ -231,31 +221,8 @@ function compute(g){
   const eSpread = mktMargin==null ? null : margin - mktMargin;
   const mktHome = (g.mkt_total!=null && g.mkt_spread!=null) ? (g.mkt_total - g.mkt_spread)/2 : null;
   const mktAway = (g.mkt_total!=null && g.mkt_spread!=null) ? (g.mkt_total + g.mkt_spread)/2 : null;
-  const OC = (DATA.overs && DATA.overs.simple_model) ? DATA.overs.simple_model.coef : null;
-  const oread = (OC && g.mkt_total!=null) ? OC.const + OC.close_total*g.mkt_total + OC.rush_edge*g.rush_edge + OC.model_edge*(total - g.mkt_total) : null;
-  return {ph, pa, total, margin, mktMargin, eTotal, eSpread, mktHome, mktAway, shoot: g.shootout, oread};
+  return {ph, pa, total, margin, mktMargin, eTotal, eSpread, mktHome, mktAway, shoot: g.shootout};
 }
-const TM = DATA.tail_model;
-function tailProb(posted, number){            // P(final total > number) for a game posted at `posted`
-  if (posted==null || number==null || isNaN(number)) return null;
-  const sd = TM.sd_a + TM.sd_b*posted, mu = TM.mu_a + TM.mu_b*posted;
-  const z = ((number - posted) - mu) / sd;
-  const q = TM.z_quantiles; let lo=0, hi=q.length;
-  while (lo<hi){ const m=(lo+hi)>>1; if (q[m] < z) lo=m+1; else hi=m; }
-  return 1 - lo/q.length;                      // share of outcomes above z
-}
-function beOf(american){ return american<0 ? (-american)/((-american)+100) : 100/(american+100); }
-function evOf(p, american){                    // ROI on risk
-  if (american<0){ const stake=-american; return (p*100 - (1-p)*stake)/stake; }
-  return (p*american - (1-p)*100)/100;
-}
-function bracketOf(t){
-  if (t==null) return null;
-  const B = DATA.overs.brackets.brackets;
-  const lab = t<44.5?'<45':t<49.5?'45-49.5':t<54.5?'50-54.5':t<59.5?'55-59.5':t<64.5?'60-64.5':'65+';
-  return B.find(b=>b.bracket===lab);
-}
-
 // ---- header / caveat
 const kickoffFmt = d => new Date(d).toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'}) + ' CT';
 $('#subline').textContent = `${DATA.season} · Week ${DATA.week} · ${DATA.games.length} FBS-vs-FBS games · built ${new Date(DATA.built_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'})} CT`;
@@ -270,8 +237,7 @@ $('#caveat').innerHTML = `
 <p><b>What it does not do.</b> Beat the closing number. 2025 vs the closer: totals <span class="k">${pct(hit0(th.hits))}</span>, spreads <span class="k">${pct(hit0(sh.hits))}</span> — break-even is 52.4%. Same finding as the NBA and MLB studies.</p>
 <p><b>The one live thread.</b> The closing line moves <i>toward</i> this projection <span class="k">${pct(opT.line_moves_toward_model)}</span> of the time on totals and <span class="k">${pct(opS.line_moves_toward_model)}</span> on spreads (2025, n=${opT.n_moved}/${opS.n_moved}) — every season tested, 57–67%. Against <i>opening</i> numbers the record is positive but thin (2025 spreads at 5+ pts edge: <span class="k">${pct(hitAt(opS.hits_vs_open,5).hit)}</span>, n=${hitAt(opS.hits_vs_open,5).n}). Read the edges below as a power rating and a line-movement lean, not a proven edge; 2026 is the forward test.</p>
 <p><b>Where the model breaks.</b> It is short on lopsided games. In the ${DATA.calibration.big_mismatch.n.toLocaleString()} games since 2015 the market made a ${'28'}+ point favourite, the market's number averaged ${fmt(DATA.calibration.big_mismatch.market_margin,1)} against an actual ${fmt(DATA.calibration.big_mismatch.actual_margin,1)} while this model said ${fmt(DATA.calibration.big_mismatch.model_margin,1)} — and went ${pct(DATA.calibration.big_mismatch.model_ats)} ATS on them. Any game here showing a double-digit disagreement is flagged <span class="pill warn">model unreliable here</span>; that is the model losing, not an edge found.</p>
-<p><b>Two different "high scoring" reads.</b> <b>Shootout</b> ranks the expected combined total. <b>Floor</b> is a separate question — how high a number BOTH teams clear — and a 60-point game split 48–12 scores badly on it. League-wide both sides top 20 in only ${pct(DATA.bothfloor.base_rates['20'])} of games. Sort by either; §9 has the evidence.</p>
-<p><b>Overs.</b> The highest-scoring matchups are the <i>worst</i> place for overs: posted totals of 60+ went over ${pct(DATA.overs.brackets.brackets.find(b=>b.bracket==='60-64.5').over_train)} and ${pct(DATA.overs.brackets.brackets.find(b=>b.bracket==='65+').over_train)} in 2015–24 and stayed under 50% in all eleven seasons. The Shootout score ranks scoring; the over read (posted level + rush edge + model gap) is the only market-relative read that held up, and it sits at break-even — see Backtest §7. <b>Buying the total down</b> (alt overs): the chance of clearing depends on the posted total's level and on nothing about the matchup — each card prints the bracket's historical rates and fair prices; compare them with your book's alt line — see §8.</p>`;
+<p><b>Overs.</b> The highest-scoring matchups are the <i>worst</i> place for overs: posted totals of 60+ went over ${pct(DATA.overs.brackets.brackets.find(b=>b.bracket==='60-64.5').over_train)} and ${pct(DATA.overs.brackets.brackets.find(b=>b.bracket==='65+').over_train)} in 2015–24 and stayed under 50% in all eleven seasons. Shootout ranks scoring, not value — see Backtest §7.</p>`;
 
 // ---- this-week cards
 let sortKey='gap', showRaw=false;
@@ -285,8 +251,6 @@ function renderCards(){
     espread: r => r.c.eSpread==null ? 1e9 : -Math.abs(r.c.eSpread),
     kick: r => new Date(r.g.date).getTime(),
     shoot: r => -r.c.shoot,
-    oread: r => r.c.oread==null ? 1e9 : -r.c.oread,
-    bfloor: r => r.g.bothfloor ? -(((r.g.bothfloor.floor70==null?9:r.g.bothfloor.floor70))*100 + r.g.bothfloor.p['20']*10) : 1e9,
   }[sortKey];
   rows.sort((x,y)=>keyf(x)-keyf(y));
   const out = [];
@@ -332,20 +296,9 @@ function renderCards(){
     const sc = c.shoot; const st = Math.max(-1,Math.min(1,(sc-50)/40));
     const shex = st>0 ? (dark()?'#e0654f':'#c4432e') : (dark()?'#5b93d8':'#2d6db5');
     const shootChip = `<span class="shoot" style="background:${Math.abs(st)<0.1?'var(--surface2)':mix(shex, Math.abs(st)*(dark()?0.55:0.42))}">Shootout <b>${Math.round(sc)}</b><span style="font:400 11px/1 'IBM Plex Sans';text-transform:none;letter-spacing:0;color:var(--ink2)">exp. total ${fmt(c.total,1)}</span></span>`;
-    const bf = g.bothfloor;
-    let bfChip = '';
-    if (bf){
-      const fl = bf.floor70==null ? 9 : bf.floor70;
-      const bt = Math.max(-1, Math.min(1, (fl-12)/8));
-      const bhex = bt>0 ? (dark()?'#e0654f':'#c4432e') : (dark()?'#5b93d8':'#2d6db5');
-      bfChip = `<span class="shoot" style="background:${Math.abs(bt)<0.1?'var(--surface2)':mix(bhex, Math.abs(bt)*(dark()?0.55:0.42))}">Floor <b>${bf.floor70==null?'&lt;10':bf.floor70}</b><span style="font:400 11px/1 'IBM Plex Sans';text-transform:none;letter-spacing:0;color:var(--ink2)">both clear, 70%</span></span>`;
-    }
-    const br = bracketOf(g.mkt_total);
-    const oPill = c.oread==null ? '' : Math.abs(c.oread)<1 ? '<span class="pill flat">over read: flat</span>' : c.oread>0 ? `<span class="pill hot">over read ${sgn(c.oread)}</span>` : `<span class="pill cold">under read ${sgn(c.oread)}</span>`;
-    const read2 = `Rush edge <b>${sgn(g.rush_edge,2)}</b> yds/carry (${g.home.abbr} ${sgn(g.rush_edge_home,2)}, ${g.away.abbr} ${sgn(g.rush_edge_away,2)}; ${Math.round(g.rush_edge_pct)}th pct) · Pass edge <b>${sgn(g.pass_edge,2)}</b> yds/att (${g.home.abbr} ${sgn(g.pass_edge_home,2)}, ${g.away.abbr} ${sgn(g.pass_edge_away,2)}; ${Math.round(g.pass_edge_pct)}th pct)` +
-      (br ? ` · Posted ${fmt(g.mkt_total,1)} sits in the ${br.bracket} bracket, where overs hit <b>${pct(br.over_train)}</b> 2015–24 / <b>${pct(br.over_holdout)}</b> in 2025 (n=${br.n_train}/${br.n_holdout})` : '') + ` ${oPill}`;
+    const read2 = `Rush edge <b>${sgn(g.rush_edge,2)}</b> yds/carry (${g.home.abbr} ${sgn(g.rush_edge_home,2)}, ${g.away.abbr} ${sgn(g.rush_edge_away,2)}; ${Math.round(g.rush_edge_pct)}th pct) · Pass edge <b>${sgn(g.pass_edge,2)}</b> yds/att (${g.home.abbr} ${sgn(g.pass_edge_home,2)}, ${g.away.abbr} ${sgn(g.pass_edge_away,2)}; ${Math.round(g.pass_edge_pct)}th pct)`;
     out.push(`<div class="card">
-      <div class="head"><span class="ko">${g.away.abbr} at ${g.home.abbr}</span>${shootChip}${bfChip}<span>${kickoffFmt(g.date)}</span>${g.tv?`<span>${g.tv}</span>`:''}<span>${g.venue||''}${g.neutral?' (neutral)':''}</span><span class="mkt">${mktTxt}</span></div>
+      <div class="head"><span class="ko">${g.away.abbr} at ${g.home.abbr}</span>${shootChip}<span>${kickoffFmt(g.date)}</span>${g.tv?`<span>${g.tv}</span>`:''}<span>${g.venue||''}${g.neutral?' (neutral)':''}</span><span class="mkt">${mktTxt}</span></div>
       <table>
         <thead>
           <tr><th class="l" rowspan="2">Team</th><th rowspan="2">GP</th><th class="grp sep" colspan="3">Offense${showRaw?' (raw, this season)':' (adjusted)'}</th><th class="grp sep" colspan="3">vs opponent's defense${showRaw?' (raw allowed)':' (adjusted, allows)'}</th><th class="sep" rowspan="2">Tempo<br>plays</th><th rowspan="2">Proj pts</th><th rowspan="2">Market implied</th><th rowspan="2">Δ</th></tr>
@@ -356,31 +309,9 @@ function renderCards(){
       <div class="read">Model: <b>${modelLine}</b>, total <b>${fmt(c.total,1)}</b> (${fmt(c.pa,1)}–${fmt(c.ph,1)}). Market: <b>${marketLine}</b>, total <b>${g.mkt_total!=null?fmt(g.mkt_total,1):'—'}</b>. ${relPill||lean}${relPill?'':side}${g.completed?` <span class="pill flat">final ${g.away_pts}–${g.home_pts}</span>`:''}</div>
       ${relNote?`<div class="read2" style="color:var(--warn)">${relNote}</div>`:''}
       <div class="read2">${read2}</div>
-      ${bf ? `<div class="read2"><b>Both-teams floor</b> — how high a number BOTH sides clear, read off the market's implied underdog total of ${fmt(bf.dog_total,1)}: both score more than 13 <b>${pct(bf.p['13'])}</b> · more than 17 <b>${pct(bf.p['17'])}</b> · more than 20 <b>${pct(bf.p['20'])}</b> · more than 24 <b>${pct(bf.p['24'])}</b>. Highest number both clear 70% of the time: <b>${bf.floor70==null?'under 10':bf.floor70}</b> (60% of the time: ${bf.floor60==null?'under 10':bf.floor60}). League-wide both sides top 20 in just ${pct(DATA.bothfloor.base_rates['20'])} of games — see Backtest §9.</div>` : ''}
-      ${g.ladder ? `<div class="read2" style="border-top:1px solid var(--line2);padding-top:6px"><b>What to take at each price</b> (the deepest number that still beats the juice, from ${g.ladder.n.toLocaleString()} comparable games): ${g.ladder.rows.map(r=>r.pts==null?`<span style="color:var(--ink3)">${r.price} unreachable</span>`:`<b>${r.price}</b> → over <b>${fmt(r.number,1)}</b> <span style="color:var(--ink3)">(${r.pts} pts, clears ${pct(r.rate)} vs ${pct(r.need)} needed)</span>`).join(' · ')}. Anything shallower than these at that price is a losing bet on the average game. ${g.ladder.zone==='favourable'?`<span class="pill hot">flat-ladder value zone</span> <span style="color:var(--ink3)">a book charging one price per points-bought is underpricing this total level: a 20-point buy here clears ${pct((g.ladder.edge20_vs_800+800/900))} against the ${pct(800/900)} that −800 needs.</span>`:g.ladder.zone==='unfavourable'?`<span class="pill cold">overpriced zone</span> <span style="color:var(--ink3)">high totals have the widest tails — a flat ladder charges you the same here for a materially worse bet.</span>`:''}</div>` : ''}
-      ${g.mkt_total!=null ? `<div class="calc" data-calc="${g.game_id}" data-posted="${g.mkt_total}">
-        <b>Price check</b> <label>over</label><input type="number" step="0.5" class="c-num" value="${fmt(g.mkt_total-16,1)}">
-        <label>at</label><input type="number" step="5" class="c-price" value="-600">
-        <span class="c-out"></span></div>` : ''}
-      ${g.floor ? `<div class="read2"><b>Floor</b> (alt-over, from the ${g.floor.bracket} bracket, n=${g.floor.n.toLocaleString()}): clears posted −8 <b>${pct(g.floor.k8)}</b> (fair ${fairOdds(g.floor.k8)}) · −11 <b>${pct(g.floor.k11)}</b> (fair ${fairOdds(g.floor.k11)}) · −14 <b>${pct(g.floor.k14)}</b> (fair ${fairOdds(g.floor.k14)}) · −16 <b>${pct(g.floor.k16)}</b> (fair ${fairOdds(g.floor.k16)}) · −20 <b>${pct(g.floor.k20)}</b> (fair ${fairOdds(g.floor.k20)}). These are the rates for this total level; the matchup itself does not move them — see Backtest §8.</div>` : ''}
     </div>`);
   }
   $('#cards').innerHTML = out.length ? out.join('') : '<p style="color:var(--ink2)">No games clear that edge filter.</p>';
-  document.querySelectorAll('.calc').forEach(box => {
-    const posted = parseFloat(box.dataset.posted);
-    const num = box.querySelector('.c-num'), pr = box.querySelector('.c-price'), o = box.querySelector('.c-out');
-    const run = () => {
-      const n = parseFloat(num.value), a = parseFloat(pr.value);
-      if (isNaN(n) || isNaN(a) || a===0){ o.innerHTML = ''; return; }
-      const p = tailProb(posted, n), need = beOf(a), roi = evOf(p, a);
-      const ok = roi >= 0;
-      o.innerHTML = `→ clears <span class="v">${pct(p)}</span> · need <span class="v">${pct(need)}</span> · `
-        + `<span class="v ${ok?'good':'bad'}">${(roi*100>=0?'+':'')}${(roi*100).toFixed(1)}% ROI ${ok?'✓ take it':'✗ pass'}</span>`
-        + `<span style="color:var(--ink3)"> · fair price ${p>=0.5?'−'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p)} · buying ${fmt(posted-n,1)} pts</span>`
-        + ((posted-n) > 26 ? `<span style="color:var(--warn)"> · thin data past 26 points — only ${pct(0.0126)} of games since 2015 missed by that much, so treat this as extrapolated</span>` : '');
-    };
-    num.addEventListener('input', run); pr.addEventListener('input', run); run();
-  });
 }
 document.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-sort]').forEach(x => x.setAttribute('aria-pressed', x===b));
@@ -394,28 +325,25 @@ for (const k of ['pts','sr','xr','home']){
 
 // ---- shootout tab: one row per game, sorted by scoring potential
 const SCAL = DATA.shoot_calibration;
-const sBucket = v => SCAL.buckets.find(b => v>=b.lo && v<b.hi) || SCAL.buckets[SCAL.buckets.length-1];
 let soSort='shoot', soLined=false;
 function renderShoot(){
   const cal = SCAL.buckets;
   const lo = cal[0], hi = cal[cal.length-1];
   $('#so-caveat').innerHTML = `
 <p><b>What the number is.</b> Shootout is a percentile, not a point total. It ranks this game's <i>expected</i> combined score — both teams' projected points added up — against all ${SCAL.n.toLocaleString()} FBS-vs-FBS games played since ${SCAL.seasons[0]}. A 92 means the model expects more points here than in 92% of college football games. Nothing about the betting market goes into it; it is a pure scoring read.</p>
-<p><b>What it is not.</b> It is not a signal to bet the over, and on your own history it points the wrong way. Sorted into buckets by that same percentile, the games at the top have been the <i>worst</i> over bets and the ones at the bottom the best — over rate falls from <span class="k">${pct(lo.over_rate)}</span> in the bottom fifth to <span class="k">${pct(hi.over_rate)}</span> in the top tenth, and a 16-point buy-down goes from clearing <span class="k">${pct(lo.clear16)}</span> to <span class="k">${pct(hi.clear16)}</span> against the <span class="k">${pct(hi.need600)}</span> a −600 price needs. The reason is that the market already knows which games are shootouts: the top bucket averaged a posted total of ${fmt(hi.avg_posted,1)} and the games landed on ${fmt(hi.avg_actual,1)}. High-scoring games are also the highest-variance ones, which is exactly what hurts a deep alternate over.</p>
-<p><b>So use this tab to see the scoring picture, then check the price.</b> The right-hand column carries each game's bucket record on a 16-point buy so the tension stays visible while you sort. The bet decision lives on the <b>This week</b> tab, where the price calculator prices the actual number and juice your book is showing — see Backtest §7 and §8 for how each of these was measured.</p>`;
+<p><b>What it is not.</b> It is not a signal to bet the over. Bucketed by this same percentile, the games at the top have gone over <span class="k">${pct(hi.over_rate)}</span> of the time against <span class="k">${pct(lo.over_rate)}</span> for the games at the bottom, because the market already knows which games are shootouts: the top bucket averaged a posted total of ${fmt(hi.avg_posted,1)} and the games landed on ${fmt(hi.avg_actual,1)}. Use it to see the scoring picture; the posted line on the This week tab tells you what the market thinks.</p>`;
 
   const played = DATA.games.filter(g => g.completed).length;
   const rows = DATA.games.map(g => ({g, c: compute(g)})).filter(r => !r.g.completed).filter(r => !soLined || r.g.mkt_total!=null);
-  const keyf = {shoot: r=>-r.c.shoot, kick: r=>new Date(r.g.date).getTime(),
-                edge: r=>-sBucket(r.c.shoot).roi16_at_600}[soSort];
+  const keyf = {shoot: r=>-r.c.shoot, kick: r=>new Date(r.g.date).getTime()}[soSort];
   rows.sort((x,y)=>keyf(x)-keyf(y));
-  const head = `<thead><tr><th class="l">#</th><th class="l">Matchup</th><th class="l">Kickoff</th><th class="sep">Expected total</th><th>Posted</th><th class="sep">Shootout</th><th class="l"></th><th class="sep">Bucket</th><th>Clears −16</th><th>ROI at −600</th></tr></thead>`;
+  const head = `<thead><tr><th class="l">#</th><th class="l">Matchup</th><th class="l">Kickoff</th><th class="sep">Expected total</th><th>Posted</th><th class="sep">Shootout</th><th class="l"></th><th class="sep">Model line</th></tr></thead>`;
   const body = '<tbody>' + rows.map((r,i) => {
-    const {g,c} = r, sc = c.shoot, b = sBucket(sc);
+    const {g,c} = r, sc = c.shoot;
+    const fav = c.margin>0 ? g.home : g.away;
     const t = Math.max(-1, Math.min(1, (sc-50)/40));
     const hex = t>0 ? (dark()?'#e0654f':'#c4432e') : (dark()?'#5b93d8':'#2d6db5');
     const bg = Math.abs(t)<0.08 ? 'var(--surface2)' : mix(hex, Math.abs(t)*(dark()?0.55:0.42));
-    const good = b.roi16_at_600 >= 0;
     return `<tr>
       <td class="l" style="color:var(--ink3)">${i+1}</td>
       <td class="mu">${g.away.abbr} at ${g.home.abbr}<small>${g.away.name} at ${g.home.name}${g.neutral?' · neutral':''}</small></td>
@@ -424,20 +352,11 @@ function renderShoot(){
       <td style="color:var(--ink2)">${g.mkt_total!=null?fmt(g.mkt_total,1):'—'}</td>
       <td class="sc sep" style="background:${bg}">${Math.round(sc)}</td>
       <td class="l" style="width:120px"><span class="bar"><i style="width:${Math.round(sc)}%;background:${hex}"></i></span></td>
-      <td class="sep" style="color:var(--ink3)">${b.lo}–${b.hi>100?100:b.hi}</td>
-      <td style="color:var(--ink2)">${pct(b.clear16)}</td>
-      <td class="${good?'ok':'bad'}">${(b.roi16_at_600*100>=0?'+':'')}${(b.roi16_at_600*100).toFixed(1)}%</td>
+      <td class="sep" style="color:var(--ink2)">${fav.abbr} -${fmt(Math.abs(c.margin),1)}</td>
     </tr>`;
   }).join('') + '</tbody>';
   $('#sotable').innerHTML = head + body + (played ? `<caption style="caption-side:bottom;text-align:left;padding:6px 8px;font-size:12px;color:var(--ink3)">${played} game${played>1?'s':''} from earlier this week already played and hidden here — still on the This week tab with the final score.</caption>` : '');
 
-  $('#so-cal').innerHTML = `<div class="fig" style="margin-top:14px;max-width:820px">
-    <p class="t">The Shootout percentile against the over, ${SCAL.seasons[0]}–${SCAL.seasons[1]} (n=${SCAL.n.toLocaleString()})</p>
-    <div class="wrap"><table><thead><tr><th class="l">Shootout bucket</th><th>n</th><th>Avg posted</th><th>Avg actual</th><th>Over hits</th><th>Clears −12</th><th>Clears −16</th><th>Clears −20</th><th>ROI, −16 at −600</th></tr></thead><tbody>`
-    + cal.map(b=>`<tr><td class="l">${b.lo}–${b.hi>100?100:b.hi}</td><td>${b.n.toLocaleString()}</td><td>${fmt(b.avg_posted,1)}</td><td>${fmt(b.avg_actual,1)}</td><td>${pct(b.over_rate)}</td><td>${pct(b.clear12)}</td><td>${pct(b.clear16)}</td><td>${pct(b.clear20)}</td><td class="${b.roi16_at_600>=0?'ok':'bad'}">${(b.roi16_at_600*100>=0?'+':'')}${(b.roi16_at_600*100).toFixed(1)}%</td></tr>`).join('')
-    + `</tbody></table></div>
-    <p class="cap">Each game's percentile is computed the way the live board does it — ranked against the projected totals of every <i>prior</i> season only, so no season grades itself. Break-even at −600 is ${pct(cal[0].need600)}. Every column falls as the percentile rises; the rank correlation between Shootout and clearing a 16-point buy is ${fmt(SCAL.spearman_shoot_vs_clear16,3)}. The ROI column assumes a flat −600 for 16 points bought at every total level, which is the assumption still worth checking at your book — a book that prices by the number instead of by the points would change these figures.</p>
-  </div>`;
 }
 document.querySelectorAll('[data-ssort]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-ssort]').forEach(x => x.setAttribute('aria-pressed', x===b));
@@ -516,7 +435,7 @@ function seasonFig(rows){
 function oversSection(){
   const O = DATA.overs; if (!O) return '';
   const br = O.brackets.brackets;
-  const scr = O.screen; const sm = O.simple_model; const rp = O.rushpass; const bf = O.blowout_fix;
+  const scr = O.screen; const rp = O.rushpass; const bf = O.blowout_fix;
   const keys = ['proj_total','shoot_pts','def_sum','worst_def','off_sum','pace','pass_mix','xr_sum','rush_edge','pass_edge','align','align_max','close_total','open_move','wk','indoor','conf_game'];
   const seasonsHi = O.brackets.hi60_by_season;
   const rpm = rp.models;
@@ -533,58 +452,8 @@ function oversSection(){
      return `<tr><td class="l">${r.label}</td><td>${sgn(r.corr_total_train,2)}</td><td>${pct(top.over_rate)}</td><td>${pct(bot.over_rate)}</td><td>${pct(th.over_rate)}</td><td>${pct(bh.over_rate)}</td><td>${r.n_seasons?`${r.seasons_top_gt_bottom}/${r.n_seasons}`:'—'}</td></tr>`;}).join('')}
   </tbody></table></div>
   <p><b>Reading it.</b> The projected total and the Shootout index find high-scoring games well (correlation ~0.37 with the actual total) — and the games they rank highest go <i>under</i> more often, because the market already knows and leans a little too far. Tempo, pass rate, explosiveness, the biggest single-side edge, week of season, domes and conference games are all flat against the line. The <b>run/pass matchup idea is a null in every form</b>: offense lean × defense weakness (efficiency), the same thing by volume (pass-heavy offense vs. weak pass defense), and the best single-side alignment all correlate ~0.00 with points and with overs. What the two teams are good at overall matters; how they get there doesn't add anything the total hasn't already priced. The one matchup component with a lean is the <b>rush edge</b> — both offenses' yards per carry above average plus both defenses' yards per carry allowed above average: its top fifth went over ${pct(scr.rush_edge.q_train[4].over_rate)} vs ${pct(scr.rush_edge.q_train[0].over_rate)} for the bottom fifth, top beat bottom in ${scr.rush_edge.seasons_top_gt_bottom} of ${scr.rush_edge.n_seasons} seasons, about +1 point vs the closer. Weak, but consistent in direction.</p>
-  <p><b>The over read on the board</b> combines the three things that showed any stability — posted-total level, rush edge, and the model's gap to the posted number — fitted on 2015–24: <span class="k">${fmt(sm.coef.const,2)} ${sgn(sm.coef.close_total,3)}×posted ${sgn(sm.coef.rush_edge,2)}×rush edge ${sgn(sm.coef.model_edge,3)}×(model − posted)</span>. Its record when it says at least ±1:</p>
-  <div class="grid2">
-    <div><p style="font-weight:600;margin:0 0 4px">2015–24, leave-one-season-out</p><table><thead><tr><th class="l">read</th><th>n</th><th>hit</th><th>share overs</th></tr></thead><tbody>${sm.train_loso_hits.map(h=>`<tr><td class="l">≥ ${h.min_pred_edge}</td><td>${h.n.toLocaleString()}</td><td class="${h.hit>=0.524?'ok':''}">${pct(h.hit)}</td><td>${pct(h.over_share)}</td></tr>`).join('')}</tbody></table></div>
-    <div><p style="font-weight:600;margin:0 0 4px">2025 holdout</p><table><thead><tr><th class="l">read</th><th>n</th><th>hit</th><th>share overs</th></tr></thead><tbody>${sm.holdout_hits.map(h=>`<tr><td class="l">≥ ${h.min_pred_edge}</td><td>${h.n.toLocaleString()}</td><td class="${h.hit>=0.524?'ok':''}">${pct(h.hit)}</td><td>${pct(h.over_share)}</td></tr>`).join('')}</tbody></table></div>
-  </div>
-  <p>Per season at ±1: ${sm.per_season_edge1.map(r=>`${r.season} <span class="k">${r.hit==null?'—':pct(r.hit)}</span>`).join(' · ')}. That is break-even, not an edge — above 52.4% in ${sm.per_season_edge1.filter(r=>r.hit>0.524).length} of ${sm.per_season_edge1.length} seasons. It mostly says "over" on low totals and "under" on high ones; use it as a filter on which overs to consider, not as a reason to bet.</p>
   <p><b>Run vs. pass as inputs to the score.</b> Splitting the ratings into rushing and passing barely moves the team-points miss (${fmt(rpm['SCORE'].mae_holdout,2)} → ${fmt(rpm['SCORE + everything rush/pass'].mae_holdout,2)} in 2025). Alone, a defense's rushing yards allowed predicts opponent points better than its passing yards allowed (corr ${fmt(rp.univariate.D_rush_ypc,2)} vs ${fmt(rp.univariate.D_pass_ypa,2)}), and rushing efficiency persists within a season more than passing (${fmt(rp.persistence.rush_ypc,2)} vs ${fmt(rp.persistence.pass_ypa,2)}); pass rate itself is very stable (${fmt(rp.persistence.pass_rate,2)}) but predicts nothing. So "bad run defense" is the more reliable marker of an exploitable defense; "bad pass defense" is noisier.</p>
   <p><b>Blowout fix.</b> The linear score under-projected big favorites (35+ point spreads: model 44.7, market 49.7, actual 49.7). Two hinge terms — rating margin beyond ±21 — cut the favorite's miss in 28+ point mismatches from ${sgn(bf['SCORE'].bias_holdout_big_fav,1)} to ${sgn(bf['SCORE + blowout terms'].bias_holdout_big_fav,1)} in 2025 (n=${bf['SCORE'].n_big_holdout}) with no cost elsewhere; they are now in the projection.</p>`;
-}
-function floorSection(){
-  const F = DATA.floor; if (!F) return '';
-  const b = F.base;
-  const off = b.offsets; const bt = b.by_total; const bs = b.by_spread;
-  const keys = ['off_sum','off_min','worst_def','def_max','sr_sum','sr_min','xr_sum','pace','pass_mix','rush_edge','vol_sum','vol_max','floor_min','ptsd_sum','spread_abs','mkt_dog_total','model_edge','wk','indoor'];
-  const m11 = F.models['11'], m16 = F.models['16'];
-  return `
-  <p>The question: if the total is 56, how often does the game clear 45 (an 11-point buy) or 40 (16 points) — and are there matchups where that is more reliable than the book's generic alt-line curve assumes? Across ${b.n.toLocaleString()} games the total's miss vs the closing number has a spread (SD) of <span class="k">${fmt(b.sd,1)}</span> points and is almost exactly normal in the lower tail.</p>
-  <div class="wrap"><table><thead><tr><th class="l">Points bought</th><th>cleared, 2015–25</th><th>normal curve</th><th>2025</th><th>season range</th><th>fair price</th></tr></thead><tbody>
-  ${off.map(r=>`<tr><td class="l">−${r.k}</td><td>${pct(r.empirical)}</td><td>${pct(r.normal)}</td><td>${pct(r.holdout)}</td><td>${pct(r.season_min)} – ${pct(r.season_max)}</td><td>${fairOdds(r.empirical)}</td></tr>`).join('')}
-  </tbody></table></div>
-  <p>Anything worse than the fair price is a losing bet on the average game. The rates do move with the <b>level</b> of the posted total — tighter on low totals, wider on high ones — and barely at all with the spread:</p>
-  <div class="grid2">
-  <div class="wrap"><table><thead><tr><th class="l">Posted total</th><th>n</th><th>SD</th><th>−8</th><th>−11</th><th>−14</th><th>−16</th><th>−20</th></tr></thead><tbody>
-  ${bt.map(r=>`<tr><td class="l">${r.bracket}</td><td>${r.n.toLocaleString()}</td><td>${fmt(r.sd,1)}</td><td>${pct(r.hit8)}</td><td>${pct(r.hit11)}</td><td>${pct(r.hit14)}</td><td>${pct(r.hit16)}</td><td>${pct(r.hit20)}</td></tr>`).join('')}
-  </tbody></table></div>
-  <div class="wrap"><table><thead><tr><th class="l">Spread size</th><th>n</th><th>SD</th><th>−8</th><th>−11</th><th>−14</th><th>−16</th><th>−20</th></tr></thead><tbody>
-  ${bs.map(r=>`<tr><td class="l">${r.bracket}</td><td>${r.n.toLocaleString()}</td><td>${fmt(r.sd,1)}</td><td>${pct(r.hit8)}</td><td>${pct(r.hit11)}</td><td>${pct(r.hit14)}</td><td>${pct(r.hit16)}</td><td>${pct(r.hit20)}</td></tr>`).join('')}
-  </tbody></table></div>
-  </div>
-  <p><b>Does the matchup change it?</b> No. Every input was tested with the posted total held constant (logistic z-score) and as top-vs-bottom fifth <i>within</i> total brackets. Two good offenses, a weak underdog offense, two bad defenses, high success rate (consistency), explosiveness, tempo, pass rate, each team's measured scoring volatility so far, each team's raw 20th-percentile points so far, the model's own gap to the number — none of it moves the chance of clearing 11 or 16 points:</p>
-  <div class="wrap"><table><thead><tr><th class="l">Input</th><th>z, −11</th><th>z, −16</th><th>top fifth −11</th><th>bottom fifth −11</th><th>2025 top / bottom</th><th>top fifth −16</th><th>bottom fifth −16</th></tr></thead><tbody>
-  ${keys.filter(k=>F.screen[k]).map(k=>{const r=F.screen[k]; return `<tr><td class="l">${r.label}</td><td>${r.z11==null?'—':sgn(r.z11,1)}</td><td>${r.z16==null?'—':sgn(r.z16,1)}</td><td>${pct(r.s11.top)}</td><td>${pct(r.s11.bottom)}</td><td>${pct(r.h11.top)} / ${pct(r.h11.bottom)}</td><td>${pct(r.s16.top)}</td><td>${pct(r.s16.bottom)}</td></tr>`;}).join('')}
-  </tbody></table></div>
-  <p>A model with all of those inputs, fitted on 2015–24, gained nothing over "posted total only" in 2025 (log-likelihood ${sgn(m11.loglik_gain,1)} at −11, ${sgn(m16.loglik_gain,1)} at −16). Its most-confident tenth of games cleared 11 points <span class="k">${pct(m11.top_holdout[0].actual)}</span> of the time (predicted ${pct(m11.top_holdout[0].pred)}; the total-only model's top tenth: ${pct(m11.top_holdout_baseline[0].actual)}; base rate ${pct(m11.base_rate_holdout)}), and 16 points <span class="k">${pct(m16.top_holdout[0].actual)}</span> (base ${pct(m16.base_rate_holdout)}).</p>
-  <p><b>Deep alt-overs and the price.</b> At −600 you need to win 85.7% of the time; at −800, 88.9%. Each card now prints the deepest number that clears break-even at −200 through −800 for that game's total bracket. The trap is that the required buy grows with the posted total: 16 points bought clears 89.6% on a sub-45 total but only 80.0% on a 65+ total. If a book prices its alt ladder by points bought rather than by the level of the number, the low-total games are the underpriced ones and the high-total games are where you overpay. <b>A balanced "both teams can score" matchup does not help this bet</b> — holding the posted total constant, the most balanced third of games cleared −16 about 1.9 points <i>less</i> often than the most lopsided third, and the sign held in all five brackets. Blowouts score points too; you need a high total, not a shared one.</p>
-  <p><b>Can the model tell two equally-priced alt-overs apart?</b> Tested directly, because it is the whole question for this bet. Candidate separators: combined turnover rate, spread size, the quality of the better defense, pace, both teams' scoring volatility, their worst games so far, the weaker offense, and the both-teams floor. Fitted leave-one-season-out across all eleven seasons, then ranked each season's games and measured the top fifth. <b>The matchup features subtract rather than add</b>: at a 16-point buy the top fifth by the full model cleared 87.3% against 87.8% for a ranking that uses the posted total and nothing else; at 20 points, 92.3% against 93.3%. Combined turnover rate looked real on a single-feature screen (z = −2.2 at 16 points, −2.8 at 20) and did not survive the ranking test — with fourteen features screened, roughly one crossing z = 2 by chance is what you expect. <b>The separation that does exist is the level of the number.</b> Lowest fifth of posted totals: a 20-point buy clears 93.3%, above the 88.9% that −800 needs, in 10 of 11 seasons. Highest fifth: 86.2%, below it. That is a 7-point spread in win rate between two bets a flat ladder would price identically.</p>
-  <p><b>What this means for buying points.</b> The floor is set by the number, not the teams. On a 56 total the game clears 45 about ${pct(bt.find(r=>r.bracket==='55-59.5').hit11)} of the time and 40 about ${pct(bt.find(r=>r.bracket==='55-59.5').hit16)} — fair prices ${fairOdds(bt.find(r=>r.bracket==='55-59.5').hit11)} and ${fairOdds(bt.find(r=>r.bracket==='55-59.5').hit16)} — whoever is playing. If your book charges more than that, the buy loses regardless of how good both offenses look. The one place the generic curve is beatable is the total's level itself: if a book prices the 11-point buy the same on a 42 total as on a 66 total, the low-total buy is the underpriced one (${pct(bt[0].hit11)} vs ${pct(bt[bt.length-1].hit11)}). Slight right skew also makes very deep buys (−20 and beyond) a touch safer than a normal curve implies (${pct(off.find(r=>r.k===20).empirical)} vs ${pct(off.find(r=>r.k===20).normal)}) — pennies in front of a steamroller, but real.</p>`;
-}
-function bothFloorSection(){
-  const B = DATA.bothfloor; if (!B) return '';
-  const t = B.empirical_bins; const pc = B.predictor_corr;
-  return `
-  <p>"High scoring" can mean two different things. The projected total answers <i>how many points combined</i>. This answers <i>how high is the number both sides clear</i> — a different property, and the one that matters when a game can go 48–12 and still total 60. Across ${B.n.toLocaleString()} games the lower team's score has a median of 19; both sides top 13 in ${pct(B.base_rates['13'])} of games, top 17 in ${pct(B.base_rates['17'])}, top 20 in ${pct(B.base_rates['20'])}, and top 24 in only ${pct(B.base_rates['24'])}.</p>
-  <p>What predicts the lower score best is the <b>market's implied underdog team total</b> (correlation ${fmt(pc.market_dog_total,3)} with the realised minimum) — better than this model's own weaker-side projection (${fmt(pc.model_weaker_side,3)}) or the posted total (${fmt(pc.posted_total,3)}). Adding our model's projection on top of the market number gained nothing on the 2025 holdout (log-likelihood within ±0.4 at every threshold). So the floor shown on each card is a read on the market's number, not a claim to beat it.</p>
-  <div class="wrap"><table><thead><tr><th class="l">Market implied dog total</th><th>n</th><th>median low score</th><th>both &gt;13</th><th>both &gt;17</th><th>both &gt;20</th><th>both &gt;24</th><th>70% floor</th></tr></thead><tbody>
-  ${t.map(r=>`<tr><td class="l">${r.bin}</td><td>${r.n.toLocaleString()}</td><td>${fmt(r.median_min,0)}</td><td>${pct(r.p13)}</td><td>${pct(r.p17)}</td><td>${pct(r.p20)}</td><td>${pct(r.p24)}</td><td class="${r.floor70>=16?'ok':''}">${r.floor70}</td></tr>`).join('')}
-  </tbody></table></div>
-  <p><b>It holds out of sample.</b> Predicted against actual on the untouched 2025 season, by tercile of predicted probability:</p>
-  <div class="wrap"><table><thead><tr><th class="l">threshold</th><th>low third pred / actual</th><th>middle</th><th>top third</th></tr></thead><tbody>
-  ${['13','17','20','24'].map(x=>`<tr><td class="l">both &gt; ${x}</td>${B.validation[x].map(c=>`<td>${pct(c.pred)} / ${pct(c.actual)}</td>`).join('')}</tr>`).join('')}
-  </tbody></table></div>
-  <p><b>How to use it.</b> As a selection screen, not a bet against the number. The honest ceiling is lower than it feels: even in the richest bucket — an implied underdog total above 28 — both teams clear 20 only ${pct(t[t.length-1].p20)} of the time, and the highest number both sides clear 70% of the time is ${t[t.length-1].floor70}. A game where "both teams will definitely score 21" is close to the best case available, not a common one. Where this earns its keep is separating two games with the same posted total: the one with the higher implied underdog total has the genuinely better floor, and is the sounder place to look for team-total overs on both sides or a two-sided scoring read.</p>`;
 }
 function renderBT(){
   const A = B.team_points;
@@ -642,10 +511,6 @@ function renderBT(){
   <p><b>Reading it.</b> The direction of line movement agreeing with the model 57–67% of the time in every season is a real, stable signal: the score sees what the market's own sharper money later prices in. Turning that into profit means betting the opener (Sunday/Monday) and accepting the thinner record above — positive in the pooled sample, positive but small-n in 2025 (spreads at 5+ edge: ${pct(hitAt(op.holdout_spreads.hits_vs_open,5).hit)}, n=${hitAt(op.holdout_spreads.hits_vs_open,5).n}; totals at 3+: ${pct(hitAt(op.holdout_totals.hits_vs_open,3).hit)}, n=${hitAt(op.holdout_totals.hits_vs_open,3).n}). The 2026 season is the forward test; the board records each week's posted line at build time so the sample grows on its own.</p>
   <h2>7 · Overs: what makes a shootout vs. what makes an over</h2>
   ${oversSection()}
-  <h2>8 · The floor: buying the total down (alternate overs)</h2>
-  ${floorSection()}
-  <h2>9 · The both-teams floor</h2>
-  ${bothFloorSection()}
   <h2>6 · Method</h2>
   <p>Data: ESPN, keyless — every FBS game 2014–2026 (schedule, box score, drive log with play-by-play, odds archive with 4–14 books per game). Ratings: for each stat, <span class="k">stat = league + offense(team) + defense(opponent) + home</span> fitted by ridge regression on games before the week in question, FCS opponents pooled into one team, each team shrunk toward 75% of last season's final rating with the weight of two games, home field pinned to last season's value. Hyperparameters chosen by grid search on 2015–24 only. Score: ordinary least squares of team points (as a deviation from the as-of league average) on the adjusted points, success-rate and explosive-rate ratings of the offense and the opposing defense, plus home field. Evaluation: leave-one-season-out inside 2015–24, then a single look at 2025. Closing line: ESPN BET's close where recorded, else the consensus book, else the first book in a fixed priority list; opening line from ESPN BET's open or the 2015–16 "Opening" feed, both validated against the headline number (the archive stores odds in the line field for 2022–23, which is filtered out). Roughly thirty situations were screened; a few of the small-n cells will look good by chance.</p>`;
   $('#view-bt').innerHTML = html;

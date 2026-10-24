@@ -1,5 +1,13 @@
 # NCAAF Matchup Board — build brief for Claude Code
 
+> **Scope change, Oct 24 2026 (John):** the board now *scores the games from data inputs*, the way the
+> NHL and MLB sites do. The alt-line machinery described below — the Floor chip, both-teams floor,
+> bracket over rate, over read, price ladder, price-check calculator, the Shootout tab's bucket/ROI
+> columns and calibration table, Backtest §8–9 and `data/tail_model.json` — has been **removed from the
+> page and the build**. The research scripts that produced it (`ncaaf_minpts.py`, `ncaaf_floor.py`,
+> `ncaaf_bothfloor.py`, `ncaaf_bigfav.py`) stay in `pipeline/` for reference but `rebuild_all.sh` does
+> not run them. Sections marked ~~like this~~ describe the removed pieces and are kept only as history.
+
 **Read this whole document before writing any code.** It describes a system that already exists and
 works. The files in this repo are the reference implementation: every script has been run end to end
 and reproduces the published backtest to the decimal. Your job is to stand it up as a website, put it
@@ -26,13 +34,11 @@ family, same look (row per team, compact, colour-coded, every coloured cell prin
 ## 1. What this is and who it's for
 
 A weekly college-football (FBS) board. For every FBS-vs-FBS game it projects each team's points from
-public play-by-play data, compares the projection with the betting market, and prints the price math
-for the bets John actually makes.
+public play-by-play data and shows the posted line beside it for reference.
 
-**John's betting style drives the design.** He mostly bets **alternate overs bought far below the
-posted total** — e.g. a game posted 57.5, take over 41.5 at around −600 — and wants to know *which*
-games to do that in. He also asked about buying big favourites down (take −27 instead of −45).
-The board must answer: which games, at what number, at what price does it break even.
+**What John wants from it (Oct 24 2026):** score every game from the data inputs, the way the NHL
+and MLB boards do — projected points per team, the Shootout ranking, the ratings — and make the
+scoring picture easy to scan each week. Not alt lines, not bought-down totals.
 
 **What the research found (keep this framing everywhere):**
 
@@ -55,7 +61,7 @@ ncaaf-board/
 ├── CLAUDE.md                  ← short standing rules (Claude Code loads it automatically)
 ├── README.md
 ├── requirements.txt           ← requests, pandas, numpy, scipy, scikit-learn
-├── .gitignore                 ← ignores everything generated under pipeline/data except tail_model.json
+├── .gitignore                 ← ignores everything generated under pipeline/data
 ├── .github/workflows/weekly.yml  ← Tue/Thu/Sat rebuild + publish to GitHub Pages (/docs)
 ├── pipeline/                  ← the working pipeline (run from anywhere: rebuild_all.sh cds into it)
 │   ├── rebuild_all.sh         ← runs everything below in order and publishes docs/index.html
@@ -64,16 +70,15 @@ ncaaf-board/
 │   ├── ncaaf_ratings.py       ← opponent-adjusted as-of ratings → data/features.csv
 │   ├── ncaaf_backtest.py      ← Stage A/B backtest → data/backtest_results.json, data/game_projections.csv
 │   ├── ncaaf_overs.py         ← overs study, game signals → data/overs_results.json, data/game_signals.csv
-│   ├── ncaaf_minpts.py        ← → data/game_minpts.csv (input to bothfloor)
-│   ├── ncaaf_floor.py         ← alt-over floor by posted-total bracket → data/floor_results.json
-│   ├── ncaaf_bothfloor.py     ← both-teams floor logistic fits → data/bothfloor_results.json
-│   ├── ncaaf_shootcal.py      ← Shootout percentile vs over results → data/shoot_calibration.json
-│   ├── ncaaf_bigfav.py        ← big-favourite buy-down research → data/bigfav_results.json
+│   ├── ncaaf_minpts.py        ← research only (not run): → data/game_minpts.csv
+│   ├── ncaaf_floor.py         ← research only (not run): alt-over floor by posted-total bracket
+│   ├── ncaaf_bothfloor.py     ← research only (not run): both-teams floor
+│   ├── ncaaf_shootcal.py      ← Shootout percentile vs over results → data/shoot_calibration.json (Shootout tab caveat)
+│   ├── ncaaf_bigfav.py        ← research only (not run): big-favourite buy-down
 │   ├── ncaaf_forward.py       ← 2026 live forward test → data/forward_test.json
 │   ├── build_ncaaf_board.py   ← this week's board data → ncaaf_board_data.json
 │   ├── render_ncaaf_board.py  ← bakes the JSON into the template → NCAAF_Matchup_Scores_<season>_wk<week>.html
 │   ├── ncaaf_board_template.html  ← the whole front end (HTML/CSS/JS, one file, data injected at /*DATA*/)
-│   └── data/tail_model.json   ← COMMITTED input: the alt-over price model (do not regenerate casually)
 ├── docs/                      ← GitHub Pages root: index.html + history/board_<date>.json
 ├── reference/
 │   ├── ncaaf-matchup-runbook.md       ← the full research log (why every choice was made)
@@ -103,13 +108,11 @@ as 2026 games are played):
 | `ncaaf_features.py` | `games: 11500 … team-games: ~21,4xx †` |
 | `ncaaf_backtest.py` (backtest_report.txt) | `evaluation rows: 15292 team-games, seasons 2015-2025`; `SCORE + blowout terms` 9.41 / corr 0.535 (2015–24 LOSO) and 8.89 / 0.529 (2025); `MARKET implied team total` 9.08 / 0.576 and 8.59 / 0.572 |
 | `ncaaf_overs.py` | `games: 7646 \| base over rate train 0.492 holdout 0.489` |
-| `ncaaf_minpts.py` | `7646 games, 7623 with a market dog total \| corr(mkt_dog, minp) 0.4084` |
-| `ncaaf_floor.py` | `games 7625 \| SD 16.29 skew 0.35` |
-| `ncaaf_bothfloor.py` | `n=7623 \| base P(both>20)=0.443` |
-| `ncaaf_shootcal.py` | `n=6910`; bucket 0–20 clear-16 88.0% ROI +2.6%; bucket 90–101 clear-16 78.8% ROI −8.0% |
-| `ncaaf_bigfav.py` | `SD: spread 15.84 \| favourite team total 12.07 \| dog team total 10.01` |
+| `ncaaf_shootcal.py` | `n=6910`; bucket 0–20 over 51.8%; bucket 90–101 over 44.3% |
 | `build_ncaaf_board.py` (2026 season) | `coef: const 0.547, O_pts 0.632, D_pts 0.745, O_sr 32.645, D_sr 20.877, O_xr 22.402, D_xr 18.849, home_adj 2.673, blow_fav 0.172, blow_dog 0.133` |
-| `tests/smoke.js` | tabs render, 4 views, `no errors` |
+| `tests/smoke.js` | 56 cards (wk 8), 44 Shootout rows, 138 ranking rows, 7 backtest sections, `no errors` |
+
+(The research-only scripts, when run by hand: `ncaaf_minpts.py` → `corr(mkt_dog, minp) 0.4084`; `ncaaf_floor.py` → `games 7625 | SD 16.29 skew 0.35`; `ncaaf_bothfloor.py` → `n=7623 | base P(both>20)=0.443`; `ncaaf_bigfav.py` → `SD: spread 15.84 | favourite team total 12.07 | dog team total 10.01`.)
 
 (Coefficients refit automatically when a new season starts — they will differ in 2027.)
 
@@ -212,14 +215,14 @@ and maintaining it.
 | **Model unreliable here** (warn pill) | \|model margin − market margin\| ≥ 10 **or** market favourite ≥ 28. Suppresses the lean pills and prints the calibration: in 405 games with a 28+ favourite the market averaged 33.9 vs an actual 33.7 while the model said 29.2 and went 49.5% ATS. Calibration buckets come from `game_projections.csv`. |
 | **Shootout** | percentile of the projected total among the projected totals of every FBS-vs-FBS game in **prior** seasons (pool median 55.0, 90th pct 66.3). Pure scoring read, no market input. |
 | **Rush edge / pass edge** | (home O_rush + away D_rush) + (away O_rush + home D_rush), yds/carry vs average; pass the same in yds/att; each with its percentile vs prior seasons |
-| **Over read** | 7.223 − 0.121 × posted + 0.648 × rush edge − 0.043 × (model total − posted). Flat if \|read\| < 1. Break-even historically — a filter, not a signal. |
-| **Floor (alt-over by bracket)** | for the posted-total bracket (<45, 45–49.5, 50–54.5, 55–59.5, 60–64.5, 65+): share of historical games whose total beat posted − k, k = 8/11/14/16/20, with fair prices |
-| **Price ladder** | for −200/−300/−400/−500/−600/−800: the fewest points to buy (k = 1…44) whose bracket clear rate ≥ break-even; tags posted ≤ 49.5 "flat-ladder value zone", ≥ 60 "overpriced zone" |
-| **Price check calculator** | P(total > N \| posted T) = 1 − F(z), z = ((N − T) − μ(T)) / σ(T), μ(T) = 4.838 − 0.0786·T, σ(T) = 8.978 + 0.1322·T, F = empirical CDF from the 999 quantiles in `data/tail_model.json` (right-skewed residual, so deep buys are a bit safer than a normal curve says). Break-even for American A < 0: −A/(−A + 100). ROI on risk = (p·100 − (1−p)·\|A\|)/\|A\|. Fair price = −100p/(1−p). Warn past 26 points bought (only 1.3% of games missed by that much). Defaults: over posted − 16 at −600. |
-| **Both-teams floor** | dog = (T − \|S\|)/2. For X = 10…27, P(both teams score > X) = logistic(a_X + b_X · dog) from `bothfloor_results.json`. Shows P at 13/17/20/24; "70% floor" = highest X with P ≥ 0.70 ("<10" if none); also 60%. League base rate: both top 20 in 44.3% of games. It's a read on the market's number (beats our own model as a predictor), not an edge. |
-| **Shootout bucket record** (Shootout tab) | from `shoot_calibration.json`: per bucket 0–20/20–40/40–60/60–80/80–90/90–100, over rate, clear −12/−16/−20, ROI of −16 at −600 |
+| ~~REMOVED Oct 24 2026~~ **Over read** | 7.223 − 0.121 × posted + 0.648 × rush edge − 0.043 × (model total − posted). Flat if \|read\| < 1. Break-even historically — a filter, not a signal. |
+| ~~REMOVED Oct 24 2026~~ **Floor (alt-over by bracket)** | for the posted-total bracket (<45, 45–49.5, 50–54.5, 55–59.5, 60–64.5, 65+): share of historical games whose total beat posted − k, k = 8/11/14/16/20, with fair prices |
+| ~~REMOVED Oct 24 2026~~ **Price ladder** | for −200/−300/−400/−500/−600/−800: the fewest points to buy (k = 1…44) whose bracket clear rate ≥ break-even; tags posted ≤ 49.5 "flat-ladder value zone", ≥ 60 "overpriced zone" |
+| ~~REMOVED Oct 24 2026~~ **Price check calculator** | P(total > N \| posted T) = 1 − F(z), z = ((N − T) − μ(T)) / σ(T), μ(T) = 4.838 − 0.0786·T, σ(T) = 8.978 + 0.1322·T, F = empirical CDF from the 999 quantiles in `data/tail_model.json` (right-skewed residual, so deep buys are a bit safer than a normal curve says). Break-even for American A < 0: −A/(−A + 100). ROI on risk = (p·100 − (1−p)·\|A\|)/\|A\|. Fair price = −100p/(1−p). Warn past 26 points bought (only 1.3% of games missed by that much). Defaults: over posted − 16 at −600. |
+| ~~REMOVED Oct 24 2026~~ **Both-teams floor** | dog = (T − \|S\|)/2. For X = 10…27, P(both teams score > X) = logistic(a_X + b_X · dog) from `bothfloor_results.json`. Shows P at 13/17/20/24; "70% floor" = highest X with P ≥ 0.70 ("<10" if none); also 60%. League base rate: both top 20 in 44.3% of games. It's a read on the market's number (beats our own model as a predictor), not an edge. |
+| ~~REMOVED Oct 24 2026~~ **Shootout bucket record** (Shootout tab) | from `shoot_calibration.json`: per bucket 0–20/20–40/40–60/60–80/80–90/90–100, over rate, clear −12/−16/−20, ROI of −16 at −600 |
 
-**Big-favourite research** (`ncaaf_bigfav.py`, not yet on the page — see backlog): when betting a big
+**Big-favourite research** (`ncaaf_bigfav.py`, research only, not on the page): when betting a big
 favourite to "just score", the favourite's **own team total** bought down beats buying down the spread,
 because the spread carries both teams' randomness: miss SD 15.84 vs 12.07 for the favourite's implied
 team total (12.07² + 10.01² ≈ 15.8²). Favourites −14 or bigger, 15 points bought: team total cleared
@@ -236,31 +239,29 @@ four tabs.
 
 **Tab 1 — This week.** Caveat block (see §7), controls, weight sliders, legend, then one card per game.
 - Sort buttons: Spread gap · Combined total · Edge vs posted total · Edge vs posted spread · Shootout ·
-  Over read · Both-teams floor · Kickoff. Min-edge filter. "Raw inputs" toggle (raw season PPG/allowed).
+  Kickoff. Min-edge filter. "Raw inputs" toggle (raw season PPG/allowed).
 - Weight sliders 0–2× (default 1.0× = the backtested fit) for points rating, success, explosive, home.
-- Card header: matchup, Shootout chip (percentile + expected total), Floor chip, kickoff (Central
+- Card header: matchup, Shootout chip (percentile + expected total), kickoff (Central
   time), TV, venue, posted line and provider.
 - Card table, one row per team (away first): Team (rank, full name, record, home/away/neutral), GP,
   Offense — points rating / success / explosive; vs opponent's defense — allows / success / explosive;
   tempo; projected points; market implied; Δ.
 - Read lines: model line & total vs market line & total with pills; reliability note; rush/pass edges
-  with percentiles; bracket over rate; over-read pill; both-teams floor line; price-ladder line;
-  **Price check** inputs (over [number] at [price] → clears, needed, ROI, fair price, verdict); floor line.
-  Completed games show a `final` pill.
+  with percentiles. Completed games show a `final` pill.
 
 **Tab 2 — Shootout.** One row per game still to play (games already played this week are hidden with a
-caption). Columns: #, matchup, kickoff, expected total, posted, Shootout (number + bar), bucket,
-bucket's clear rate at −16, bucket's ROI at −600. Sorts: Shootout · Historical over-bet edge · Kickoff.
-Toggle "only games with a posted total". Calibration table underneath. **The bucket columns must stay**
-— sorted by Shootout alone, the tab ranks the week from worst over bet to best (see §8).
+caption). Columns: #, matchup, kickoff, expected total, posted, Shootout (number + bar), model line.
+Sorts: Shootout · Kickoff. Toggle "only games with a posted total". The caveat above the table keeps
+the over rate of the top vs bottom Shootout bucket (from `shoot_calibration.json`) so the ranking is
+never read as an over signal.
 
 **Tab 3 — Rankings.** Every FBS team's current ratings, sortable by any column (strength, offense pts,
 success, explosive, tempo, defense allows, success/explosive allowed, run/pass offense and defense,
 pass rate, raw PPG/PA).
 
-**Tab 4 — Backtest.** Sections 1–9 in plain English with tables and small inline-SVG charts: does it
+**Tab 4 — Backtest.** Sections 1–7 in plain English with tables and small inline-SVG charts: does it
 predict the game; what predicts points; recent form / tempo / turnover luck; does it beat the closer;
-opener & line movement; method; overs; the floor; the both-teams floor.
+opener & line movement; method; overs.
 
 **Visual system** (keep it — it matches the MLB site):
 - Colour means one thing everywhere: **red = pushes points up** (strong offense, leaky defense, over
@@ -284,11 +285,9 @@ private repo on paid plans) — John should decide if that's OK before turning i
 2. Never restyle Δ, the lean pills, or Shootout as an "edge" or a "pick".
 3. Keep the **model unreliable here** behaviour (spread disagreement ≥ 10 or favourite ≥ 28) — without
    it, early-season mismatches are the biggest-looking "edges" on the page and they're all artifacts.
-4. Every ROI / "take it" figure must carry the assumption it rests on: that the book charges the same
-   price per point bought regardless of the posted total's level. **This has not been verified.**
-5. Floor and price-ladder numbers are properties of the **posted total's level**, not the matchup —
-   say so where they're shown.
-6. Forward-test numbers are shown with their standard error and never as "the model is hot".
+4. ~~ROI / price figures~~ — removed from the page Oct 24 2026. If any price math ever comes back, it
+   must carry the unverified flat-pricing assumption and the "level of the total, not the matchup" note.
+5. Forward-test numbers are shown with their standard error and never as "the model is hot".
 
 ## 8. Research findings to show (and not contradict)
 
@@ -335,9 +334,9 @@ The full log, with every test and number, is `reference/ncaaf-matchup-runbook.md
 4. PAT logged outside the drive from 2021 → use 7×TD + 3×FG for drive points.
 5. Home field inflated early season → keep the home-field prior.
 6. Linear model under-projects big favourites by ~5 → keep the blowout hinges.
-7. `game_minpts.csv` must exist before `ncaaf_bothfloor.py` (rebuild_all.sh orders it correctly).
+7. `game_minpts.csv` must exist before `ncaaf_bothfloor.py` (research only; run `ncaaf_minpts.py` first).
 8. `build_ncaaf_board.py` filters `--flags` out of positional args — keep that if you touch the CLI.
-9. When even 10 points doesn't clear 70%, the floor shows "<10"; sort uses 9 as its value.
+9. ~~Floor "<10" display~~ (removed with the floor).
 10. Midweek games already played sorted to the top of the Shootout tab → now hidden there.
 11. Games in progress lose their posted line in the live scoreboard → build before kickoff.
 12. New FBS members (pooled as FCS before) have no prior-season rating — less reliable early.
@@ -354,7 +353,8 @@ Confirm with John that a public URL is OK first.
 **Phase 3 — Automate.** Enable the workflow, trigger it once by hand, confirm it commits a new
 `docs/index.html` and a history file, and that the cache step restores on the second run.
 
-**Phase 4 — Improvements (one at a time, ask John first).** Ideas, in rough priority order:
+**Phase 4 — Improvements (one at a time, ask John first).** Ideas, in rough priority order
+(items 3 and 7 are alt-line features John has set aside — keep them off unless he asks):
 1. **Results tab** from `data/forward_test.json` and `docs/history/` — grade each week's board vs what
    happened (totals/spreads vs closer with SE, bracket clear rates, the model-7+-off record).
 2. **Total-disagreement flag:** add a `model unreliable here` pill when the model is 7+ points off the

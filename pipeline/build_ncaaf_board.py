@@ -184,64 +184,11 @@ def main(season=None, week=None, do_refresh=True):
     hist_tot = np.sort(sig[sig.season < season].proj_total.dropna().values)
     hist_rush = np.sort(sig[sig.season < season].rush_edge.dropna().values)
     hist_pass = np.sort(sig[sig.season < season].pass_edge.dropna().values)
-    oc = ov["over_model_simple"]["coef"]
-    fl = json.load(open(os.path.join(DATA, "floor_results.json")))
-    fl_by_total = fl["base"]["by_total"]
-
-    # --- price ladder: at each common alt-over price, the deepest number that clears break-even
-    PRICES = [-200, -300, -400, -500, -600, -800]
-    hist_res = pd.read_csv(os.path.join(DATA, "game_signals.csv"), index_col=0).dropna(subset=["close_total"])
-
-    def price_ladder(tot):
-        if tot is None:
-            return None
-        lo, hi = (0, 44.5) if tot < 44.5 else (44.5, 49.5) if tot < 49.5 else (49.5, 54.5) if tot < 54.5 \
-            else (54.5, 59.5) if tot < 59.5 else (59.5, 64.5) if tot < 64.5 else (64.5, 200)
-        x = hist_res[(hist_res.close_total >= lo) & (hist_res.close_total < hi)]
-        out = []
-        for pr in PRICES:
-            need = (-pr) / ((-pr) + 100.0)
-            k = next((k for k in range(1, 45) if (x.total > x.close_total - k).mean() >= need), None)
-            out.append({"price": pr, "need": need, "pts": k, "number": (tot - k) if k else None,
-                        "rate": (float((x.total > x.close_total - k).mean()) if k else None)})
-        # flat-ladder value zone: at a book that prices by points-bought regardless of the number's level,
-        # low totals are underpriced and high totals overpriced (measured 2015-2025, 11 seasons)
-        zone = "favourable" if tot <= 49.5 else "neutral" if tot <= 59.5 else "unfavourable"
-        edge20 = float((x.total > x.close_total - 20).mean() - (800 / 900.0))
-        return {"n": int(len(x)), "rows": out, "zone": zone, "edge20_vs_800": edge20}
-
-    def floor_probs(tot):
-        if tot is None:
-            return None
-        lab = "<45" if tot < 44.5 else "45-49.5" if tot < 49.5 else "50-54.5" if tot < 54.5 else "55-59.5" if tot < 59.5 else "60-64.5" if tot < 64.5 else "65+"
-        b = next(x for x in fl_by_total if x["bracket"] == lab)
-        return {"bracket": lab, "n": b["n"], **{f"k{k}": b[f"hit{k}"] for k in (8, 11, 14, 16, 20)}}
-
     def pctl(arr, v):
         return float(np.searchsorted(arr, v) / max(len(arr), 1) * 100)
 
-    # --- tail model: lets any (number, price) pair be priced, not just a fixed ladder
-    tail_model = json.load(open(os.path.join(DATA, "tail_model.json")))
-
-    # --- what the Shootout percentile has been worth to an over bettor, by bucket
+    # --- the Shootout percentile's over record by bucket (shown as a caveat on the Shootout tab)
     shoot_cal = json.load(open(os.path.join(DATA, "shoot_calibration.json")))
-
-    # --- both-teams scoring floor (from the market's implied underdog team total)
-    bf = json.load(open(os.path.join(DATA, "bothfloor_results.json")))
-
-    def both_floor(tot, spr):
-        if tot is None or spr is None:
-            return None
-        dog = (tot - abs(spr)) / 2.0
-        ps = {}
-        for X, m in bf["models"].items():
-            z = m["intercept"] + m["coef"] * dog
-            ps[X] = float(1.0 / (1.0 + np.exp(-z)))
-        xs = sorted(int(x) for x in ps)
-        f70 = max([x for x in xs if ps[str(x)] >= 0.70], default=None)
-        f60 = max([x for x in xs if ps[str(x)] >= 0.60], default=None)
-        return {"dog_total": dog, "p": {k: ps[k] for k in ("13", "17", "20", "24")},
-                "floor70": f70, "floor60": f60}
 
     # --- calibration: when the model disagrees with the market on the spread, who has been right?
     gp = pd.read_csv(os.path.join(DATA, "game_projections.csv")).dropna(subset=["close_spread"])
@@ -279,15 +226,11 @@ def main(season=None, week=None, do_refresh=True):
         rush_edge = (th["O_rush"] + ta["D_rush"]) + (ta["O_rush"] + th["D_rush"])
         pass_edge = (th["O_pass"] + ta["D_pass"]) + (ta["O_pass"] + th["D_pass"])
         exp_total = ph + pa
-        over_read = None
-        if tot is not None:
-            over_read = float(oc["const"] + oc["close_total"] * tot + oc["rush_edge"] * rush_edge + oc["model_edge"] * (exp_total - tot))
         rows.append({
             "shootout": pctl(hist_tot, exp_total), "rush_edge": rush_edge, "pass_edge": pass_edge,
             "rush_edge_pct": pctl(hist_rush, rush_edge), "pass_edge_pct": pctl(hist_pass, pass_edge),
             "rush_edge_home": th["O_rush"] + ta["D_rush"], "rush_edge_away": ta["O_rush"] + th["D_rush"],
             "pass_edge_home": th["O_pass"] + ta["D_pass"], "pass_edge_away": ta["O_pass"] + th["D_pass"],
-            "over_read": over_read, "floor": floor_probs(tot), "bothfloor": both_floor(tot, spr), "ladder": price_ladder(tot),
             "game_id": str(r.game_id), "date": lv.get("date") or r.date, "neutral": bool(r.neutral),
             "venue": r.venue, "completed": bool(r.completed), "status": lv.get("status"), "tv": lv.get("broadcast"),
             "home": {**th, "proj": ph, "contrib": ch, "rank": lv.get("home_rank"), "record": lv.get("home_record")},
@@ -335,25 +278,10 @@ def main(season=None, week=None, do_refresh=True):
                            "resid_t_train": v["resid_t_train"], "resid_t_holdout": v["resid_t_holdout"],
                            "seasons_top_gt_bottom": sum(1 for p in v["per_season"] if p["top_over"] > p["bottom_over"]),
                            "n_seasons": len(v["per_season"])} for k, v in ov["screen"].items()},
-            "brackets": ov["total_brackets"], "simple_model": ov["over_model_simple"], "full_model": ov["over_model"],
-            "blowout_fix": ov["blowout_fix"], "rushpass": ov["rushpass"],
+            "brackets": ov["total_brackets"], "blowout_fix": ov["blowout_fix"], "rushpass": ov["rushpass"],
         },
         "calibration": {"by_disagreement": calib, "big_mismatch": calib_big},
-        "tail_model": tail_model,
         "shoot_calibration": shoot_cal,
-        "bothfloor": {"base_rates": bf["base_rates"], "empirical_bins": bf["empirical_bins"],
-                      "predictor_corr": bf["predictor_corr"], "n": bf["n"],
-                      "validation": {k: bf["validation"][k]["holdout_calibration"] for k in ("13", "17", "20", "24")}},
-        "floor": {
-            "base": fl["base"],
-            "screen": {k: {"label": v["label"], "z11": (v["logit_k11"] or {}).get("z"), "z16": (v["logit_k16"] or {}).get("z"),
-                           "s11": v["strata_k11_train"], "s16": v["strata_k16_train"], "h11": v["strata_k11_holdout"], "h16": v["strata_k16_holdout"],
-                           "seasons_pos_k11": v["seasons_pos_k11"], "n_seasons_k11": v["n_seasons_k11"]} for k, v in fl["screen"].items()},
-            "models": {k: {"base_rate_train": m["base_rate_train"], "base_rate_holdout": m["base_rate_holdout"],
-                           "loglik_gain": m["loglik_gain_vs_total_only_holdout"], "top_holdout": m["top_holdout"],
-                           "top_holdout_baseline": m["top_holdout_baseline_total_only"], "deciles_holdout": m["deciles_holdout"]}
-                       for k, m in fl["models"]["models"].items()},
-        },
     }
     path = os.path.join(BASE, "ncaaf_board_data.json")
     json.dump(out, open(path, "w"), default=float)

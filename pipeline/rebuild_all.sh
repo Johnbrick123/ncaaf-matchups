@@ -16,11 +16,8 @@ python3 ncaaf_features.py | tail -1
 python3 ncaaf_ratings.py 2 0.75 0.9 features 2>&1 | tail -1
 python3 ncaaf_backtest.py > backtest_report.txt 2>&1      # backtest_results.json, game_projections.csv
 python3 ncaaf_overs.py    > overs_report.txt 2>&1         # overs_results.json, game_signals.csv
-python3 ncaaf_minpts.py                                   # game_minpts.csv (input to bothfloor)
-python3 ncaaf_floor.py    > floor_report.txt 2>&1         # floor_results.json
-python3 ncaaf_bothfloor.py > bothfloor_report.txt 2>&1    # bothfloor_results.json
-python3 ncaaf_shootcal.py | tail -7                       # shoot_calibration.json
-python3 ncaaf_bigfav.py | tail -3                         # bigfav_results.json (research)
+python3 ncaaf_shootcal.py | tail -7                       # shoot_calibration.json (Shootout tab caveat)
+# research-only scripts, not needed for the board: ncaaf_minpts.py, ncaaf_floor.py, ncaaf_bothfloor.py, ncaaf_bigfav.py
 python3 ncaaf_forward.py 2>&1 | grep -v -E "Warning|c /=" | tail -10 || true   # forward_test.json
 python3 build_ncaaf_board.py "$SEASON" ${WEEK:-} --no-refresh 2>&1 | grep -v -E "Warning|c /=" | tail -3
 python3 render_ncaaf_board.py
