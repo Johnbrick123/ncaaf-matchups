@@ -1,0 +1,47 @@
+# Rebuild the NCAAF board and publish it to GitHub Pages (Settings -> Pages -> Deploy from branch: main, folder /docs).
+name: ncaaf-board
+on:
+  schedule:
+    # Times are UTC. GitHub runs scheduled jobs at low priority and they routinely fire 2-6 hours late
+    # (seen on the MLB repo). ESPN drops a game's odds once it kicks off, so the Saturday build gets
+    # three attempts (3/5/7 am Central in daylight time) to make sure one lands before the noon-ET kickoffs.
+    - cron: "0 12 * * 2,4"     # Tue / Thu 12:00 UTC  (7:00 am Central in daylight time, 6:00 am in standard)
+    - cron: "0 8,10,12 * * 6"  # Sat 08:00 / 10:00 / 12:00 UTC
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "Week to build (leave blank for the next week with unplayed games)"
+        required: false
+permissions:
+  contents: write
+concurrency:
+  group: ncaaf-board
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Restore ESPN game cache
+        uses: actions/cache@v4
+        with:
+          path: pipeline/data/games
+          key: espn-games-${{ github.run_id }}
+          restore-keys: espn-games-
+      - name: Rebuild board
+        env:
+          WEEK: ${{ github.event.inputs.week }}
+        run: bash pipeline/rebuild_all.sh
+      - name: Commit the published page
+        run: |
+          git config user.name "ncaaf-bot"
+          git config user.email "ncaaf-bot@users.noreply.github.com"
+          git add docs/
+          git commit -m "board $(date -u +%F)" || echo "no changes"
+          git push
