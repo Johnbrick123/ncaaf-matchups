@@ -6,13 +6,13 @@ and the posted line beside it for reference. Same family as the MLB and NHL matc
 
 Tabs: **This week** (one card per game, one row per team: adjusted offense, the opponent's adjusted
 defense, tempo, projected points, market implied, Δ, model line vs posted line, rush/pass edge) ·
-**Shootout** (every game ranked by expected total) · **Line moves** (opener vs the current number,
-the move, the model beside both, and the trail across the week's builds) · **Rankings** (every FBS team's ratings) ·
+**Shootout** (every game ranked by expected total) · **Line moves** (the line at the week's first build vs now,
+the move this week, the model beside both, and the trail across builds) · **Rankings** (every FBS team's ratings) ·
 **Backtest** (what the model does and does not do, 2015–2025).
 
 - **Run it:** `pip install -r requirements.txt && bash pipeline/rebuild_all.sh`, then open `index.html`.
 - **Publish it:** push to GitHub, Settings → Pages → Deploy from branch `main` / `/ (root)`. Live: https://johnbrick123.github.io/ncaaf-matchups/
-- **Automate it:** `.github/workflows/weekly.yml` rebuilds Tue/Thu/Sat at 12:00 UTC.
+- **Automate it:** `.github/workflows/weekly.yml` rebuilds Sunday 10 pm CT (openers), Tue/Thu 7 am CT and three times Saturday morning.
 - **How it works and what it can't do:** `BUILD_SPEC.md` (start here) and `reference/ncaaf-matchup-runbook.md`.
 
 The model predicts games about as well as a good public model but does not beat the closing line.

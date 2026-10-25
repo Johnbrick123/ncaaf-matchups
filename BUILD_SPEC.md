@@ -257,17 +257,22 @@ Sorts: Shootout · Kickoff. Toggle "only games with a posted total". The caveat 
 the over rate of the top vs bottom Shootout bucket (from `shoot_calibration.json`) so the ranking is
 never read as an over signal.
 
-**Tab 3 — Line moves** (added Oct 25 2026 at John's request). One row per game with a line: opener total
-→ current total with the move (red up / blue down), model total, model vs opener (coloured at 3+), a
-`toward model` / `away from model` tag; the same for the spread (move shown as "→ TEAM x.x"); and a
-**trail** of the number each build of the week saw (Tue / Thu / Sat, from `docs/history/`). Sorts:
-Biggest total move · Biggest spread move · Model vs opener · Kickoff. Toggle: hide games already played.
+**Tab 3 — Line moves** (added Oct 25 2026 at John's request; baseline corrected the same day). One row per
+game with a line. **Week open** = the line at the *first build of the week* (the Sunday 10 pm CT run, added
+for this purpose: openers are up by then); **Now** = the line at this build; **Move this week** (red up /
+blue down); model total and model vs week open (coloured at 3+) with a `toward model` / `away from model`
+tag; the same for the spread (move shown as "→ TEAM x.x"); and a **trail** of every build's number.
+ESPN's archive "open" is shown only as a muted *ESPN first #* column and nothing is measured against it:
+it has no date and for marquee games it is a look-ahead line posted a week or more early (IU at MICH wk 8:
+52.5 vs a 43.5 close). Sorts: Biggest total move this week · Biggest spread move · Model vs week open ·
+Kickoff. Toggle: hide games already played.
 Data: `build_ncaaf_board.py` calls the ESPN odds archive for every slate game (`line_archive()`: open /
 current per book, validated like close lines, provider = the one the scoreboard shows, else the close
-priority list) and reads earlier builds' lines from `docs/history/board_*.json` (`history_trail()`). The
-same archive call is what now **keeps a game's line after kickoff** (Phase 4 item 5, done). The caveat
-prints the line-move agreement by season and the model-vs-opener record, pooled and 2025, and says that
-`toward model` means the value has already been taken. Never style it as a pick.
+priority list) and reads earlier builds' lines from `docs/history/board_*.json` (`history_trail()`); the
+first trail point is the week open. The same archive call **keeps a game's line after kickoff** (Phase 4
+item 5, done). The caveat prints the line-move agreement by season and the model-vs-opener record (pooled
+and 2025) and notes that those backtest openers are ESPN's, with the same look-ahead caveat. Never style a
+move as a pick.
 
 **Tab 4 — Rankings.** Every FBS team's current ratings, sortable by any column (strength, offense pts,
 success, explosive, tempo, defense allows, success/explosive allowed, run/pass offense and defense,
@@ -326,7 +331,7 @@ The full log, with every test and number, is `reference/ncaaf-matchup-runbook.md
 
 ## 9. Automation & operations
 
-- `.github/workflows/weekly.yml` runs `pipeline/rebuild_all.sh` Tue/Thu/Sat at 12:00 UTC (before
+- `.github/workflows/weekly.yml` runs `pipeline/rebuild_all.sh` Sun 10 pm CT (Line-moves baseline), Tue/Thu 12:00 UTC and Sat 08/10/12 UTC (before
   kickoffs) plus on demand (Actions → ncaaf-board → Run workflow, optional week). It restores the ESPN
   game cache with `actions/cache`, rebuilds, copies the page to `index.html`, archives the board
   JSON to `docs/history/board_<date>.json`, and commits. First run ≈ 6 min; later runs ≈ 2 min.

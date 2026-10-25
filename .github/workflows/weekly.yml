@@ -5,6 +5,7 @@ on:
     # Times are UTC. GitHub runs scheduled jobs at low priority and they routinely fire 2-6 hours late
     # (seen on the MLB repo). ESPN drops a game's odds once it kicks off, so the Saturday build gets
     # three attempts (3/5/7 am Central in daylight time) to make sure one lands before the noon-ET kickoffs.
+    - cron: "0 3 * * 1"        # Sun 10:00 pm Central (Mon 03:00 UTC): the week's openers are up by then — this build is the Line-moves baseline
     - cron: "0 12 * * 2,4"     # Tue / Thu 12:00 UTC  (7:00 am Central in daylight time, 6:00 am in standard)
     - cron: "0 8,10,12 * * 6"  # Sat 08:00 / 10:00 / 12:00 UTC
   workflow_dispatch:
