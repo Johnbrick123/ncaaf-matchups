@@ -1,4 +1,4 @@
-# Rebuild the NCAAF board and publish it to GitHub Pages (Settings -> Pages -> Deploy from branch: main, folder /docs).
+# Rebuild the NCAAF board and publish it to GitHub Pages (Settings -> Pages -> Deploy from branch: main, folder / (root)).
 name: ncaaf-board
 on:
   schedule:
@@ -42,6 +42,6 @@ jobs:
         run: |
           git config user.name "ncaaf-bot"
           git config user.email "ncaaf-bot@users.noreply.github.com"
-          git add docs/
+          git add index.html docs/
           git commit -m "board $(date -u +%F)" || echo "no changes"
           git push

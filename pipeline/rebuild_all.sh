@@ -21,9 +21,10 @@ python3 ncaaf_shootcal.py | tail -7                       # shoot_calibration.js
 python3 ncaaf_forward.py 2>&1 | grep -v -E "Warning|c /=" | tail -10 || true   # forward_test.json
 python3 build_ncaaf_board.py "$SEASON" ${WEEK:-} --no-refresh 2>&1 | grep -v -E "Warning|c /=" | tail -3
 python3 render_ncaaf_board.py
-# publish: newest standalone page -> docs/index.html, plus a dated copy of the data
+# publish: newest standalone page -> index.html at the repo root (GitHub Pages serves main / root,
+# same as the MLB site), plus a dated copy of the board data under docs/history/
 mkdir -p ../docs/history
 latest=$(python3 -c 'import json; d=json.load(open("ncaaf_board_data.json")); print("NCAAF_Matchup_Scores_%s_wk%s.html" % (d["season"], d["week"]))')
-cp "$latest" ../docs/index.html
+cp "$latest" ../index.html
 cp ncaaf_board_data.json "../docs/history/board_$(date -u +%F).json"
-echo "== published $latest -> docs/index.html"
+echo "== published $latest -> index.html"

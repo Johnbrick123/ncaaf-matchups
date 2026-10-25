@@ -9,8 +9,8 @@ defense, tempo, projected points, market implied, Δ, model line vs posted line,
 **Shootout** (every game ranked by expected total) · **Rankings** (every FBS team's ratings) ·
 **Backtest** (what the model does and does not do, 2015–2025).
 
-- **Run it:** `pip install -r requirements.txt && bash pipeline/rebuild_all.sh`, then open `docs/index.html`.
-- **Publish it:** push to GitHub, Settings → Pages → Deploy from branch `main` / `/docs`.
+- **Run it:** `pip install -r requirements.txt && bash pipeline/rebuild_all.sh`, then open `index.html`.
+- **Publish it:** push to GitHub, Settings → Pages → Deploy from branch `main` / `/ (root)`. Live: https://johnbrick123.github.io/ncaaf-matchups/
 - **Automate it:** `.github/workflows/weekly.yml` rebuilds Tue/Thu/Sat at 12:00 UTC.
 - **How it works and what it can't do:** `BUILD_SPEC.md` (start here) and `reference/ncaaf-matchup-runbook.md`.
 

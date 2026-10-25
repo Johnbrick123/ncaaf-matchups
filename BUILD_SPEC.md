@@ -79,7 +79,9 @@ ncaaf-board/
 │   ├── build_ncaaf_board.py   ← this week's board data → ncaaf_board_data.json
 │   ├── render_ncaaf_board.py  ← bakes the JSON into the template → NCAAF_Matchup_Scores_<season>_wk<week>.html
 │   ├── ncaaf_board_template.html  ← the whole front end (HTML/CSS/JS, one file, data injected at /*DATA*/)
-├── docs/                      ← GitHub Pages root: index.html + history/board_<date>.json
+├── index.html                 ← the published board (GitHub Pages serves main / root, like the MLB site)
+├── .nojekyll                  ← tells Pages to serve files as-is
+├── docs/history/              ← board_<date>.json archived from every build
 ├── reference/
 │   ├── ncaaf-matchup-runbook.md       ← the full research log (why every choice was made)
 │   └── example_board_2026_wk8.html    ← what the finished page looks like — open it in a browser
@@ -92,9 +94,9 @@ ncaaf-board/
 python3 -m venv .venv && source .venv/bin/activate     # Python 3.11+ (tested on 3.13, pandas 3)
 pip install -r requirements.txt
 bash pipeline/rebuild_all.sh          # first run ≈ 6 min (ESPN pull of ~11,000 games), later runs ≈ 1–2 min
-open docs/index.html                  # macOS; or just double-click it
+open index.html                       # macOS; or just double-click it
 # optional browser smoke test:
-npm i playwright && npx playwright install chromium && node tests/smoke.js docs/index.html
+npm i playwright && npx playwright install chromium && node tests/smoke.js index.html
 ```
 
 `WEEK=9 bash pipeline/rebuild_all.sh` forces a week; `SEASON=2027` forces a season. With no `WEEK`,
@@ -273,7 +275,7 @@ opener & line movement; method; overs.
 - Full light/dark support via CSS custom properties on `:root` with `prefers-color-scheme`.
 - Tables scroll horizontally inside their card on narrow screens; the page itself must not.
 
-**Hosting:** GitHub Pages from `main` → `/docs`. Note a GitHub Pages site is **public** (even from a
+**Hosting:** GitHub Pages from `main` → `/ (root)`, live at https://johnbrick123.github.io/ncaaf-matchups/. Note a GitHub Pages site is **public** (even from a
 private repo on paid plans) — John should decide if that's OK before turning it on.
 
 ## 7. Honesty rules — do not drop these
@@ -314,9 +316,9 @@ The full log, with every test and number, is `reference/ncaaf-matchup-runbook.md
 
 - `.github/workflows/weekly.yml` runs `pipeline/rebuild_all.sh` Tue/Thu/Sat at 12:00 UTC (before
   kickoffs) plus on demand (Actions → ncaaf-board → Run workflow, optional week). It restores the ESPN
-  game cache with `actions/cache`, rebuilds, copies the page to `docs/index.html`, archives the board
+  game cache with `actions/cache`, rebuilds, copies the page to `index.html`, archives the board
   JSON to `docs/history/board_<date>.json`, and commits. First run ≈ 6 min; later runs ≈ 2 min.
-- Turn on Pages: repo Settings → Pages → Deploy from a branch → `main` / `/docs`.
+- Turn on Pages: repo Settings → Pages → Deploy from a branch → `main` / `/ (root)` (done Oct 25 2026).
 - **Season rollover (each August):** nothing to edit for the live board — the season is detected from
   the date, the pull range extends, and coefficients refit on all prior seasons. Do check: FBS
   conference IDs (realignment), and whether to roll the research holdout (`TRAIN`/`HOLD` constants in
@@ -347,11 +349,11 @@ The full log, with every test and number, is `reference/ncaaf-matchup-runbook.md
 check in §3, open `docs/index.html`, run the smoke test. Don't change anything yet.
 
 **Phase 2 — Publish.** `git init`, commit (the `.gitignore` keeps generated data out), create the GitHub
-repo (e.g. `johnbrick123/ncaaf-matchups`), push, enable Pages on `/docs`, confirm the live URL loads.
+repo (`johnbrick123/ncaaf-matchups`), push, enable Pages on `/ (root)`, confirm the live URL loads.
 Confirm with John that a public URL is OK first.
 
 **Phase 3 — Automate.** Enable the workflow, trigger it once by hand, confirm it commits a new
-`docs/index.html` and a history file, and that the cache step restores on the second run.
+`index.html` and a history file, and that the cache step restores on the second run.
 
 **Phase 4 — Improvements (one at a time, ask John first).** Ideas, in rough priority order
 (items 3 and 7 are alt-line features John has set aside — keep them off unless he asks):

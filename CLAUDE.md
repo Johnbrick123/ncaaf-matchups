@@ -1,12 +1,12 @@
 # NCAAF Matchup Board — standing rules
 
 Weekly college-football matchup board: Python pipeline (ESPN public data) → one self-contained HTML page
-published to GitHub Pages from `docs/`. **Full spec: `BUILD_SPEC.md` — read it before any non-trivial
+published to GitHub Pages from `index.html` at the repo root (`docs/history/` keeps each build's data). **Full spec: `BUILD_SPEC.md` — read it before any non-trivial
 change.** Research history: `reference/ncaaf-matchup-runbook.md`.
 
 ## Commands
 - Rebuild everything and publish locally: `bash pipeline/rebuild_all.sh` (optional `WEEK=9`, `SEASON=2027`)
-- Smoke test a rendered page: `node tests/smoke.js docs/index.html` (needs `npm i playwright`)
+- Smoke test a rendered page: `node tests/smoke.js index.html` (needs `npm i playwright`)
 - Single steps run from `pipeline/` (scripts import each other by module name — keep them in one folder)
 
 ## Must-follow rules
