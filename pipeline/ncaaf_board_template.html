@@ -116,6 +116,7 @@ footer{color:var(--ink3);font-size:12px;padding:20px 18px;border-top:1px solid v
   <nav role="tablist">
     <button role="tab" aria-selected="true" data-view="week">This week</button>
     <button role="tab" aria-selected="false" data-view="shootout">Shootout</button>
+    <button role="tab" aria-selected="false" data-view="lines">Line moves</button>
     <button role="tab" aria-selected="false" data-view="rank">Rankings</button>
     <button role="tab" aria-selected="false" data-view="bt">Backtest</button>
   </nav>
@@ -165,6 +166,20 @@ footer{color:var(--ink3);font-size:12px;padding:20px 18px;border-top:1px solid v
     <div class="group"><button class="btn" id="so-lined" aria-pressed="false">Only games with a posted total</button></div>
   </div>
   <div class="card"><table id="sotable"></table></div>
+</section>
+
+<section id="view-lines" class="so" hidden>
+  <div class="caveat" id="lm-caveat"></div>
+  <div class="controls">
+    <div class="group"><label>Sort</label>
+      <button class="btn" data-lsort="tmove" aria-pressed="true">Biggest total move</button>
+      <button class="btn" data-lsort="smove" aria-pressed="false">Biggest spread move</button>
+      <button class="btn" data-lsort="mopen" aria-pressed="false">Model vs opener</button>
+      <button class="btn" data-lsort="kick" aria-pressed="false">Kickoff</button>
+    </div>
+    <div class="group"><button class="btn" id="lm-hide" aria-pressed="false">Hide games already played</button></div>
+  </div>
+  <div class="card"><table id="lmtable"></table></div>
 </section>
 
 <section id="view-rank" class="rank" hidden>
@@ -320,7 +335,7 @@ document.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click'
 $('#minedge').addEventListener('input', renderCards);
 $('#rawtoggle').addEventListener('click', e => { showRaw=!showRaw; e.currentTarget.setAttribute('aria-pressed', showRaw); renderCards(); });
 for (const k of ['pts','sr','xr','home']){
-  $('#w-'+k).addEventListener('input', e => { W[k]=parseFloat(e.target.value); $('#wv-'+k).textContent = W[k].toFixed(1)+'×'; renderCards(); renderRank(); });
+  $('#w-'+k).addEventListener('input', e => { W[k]=parseFloat(e.target.value); $('#wv-'+k).textContent = W[k].toFixed(1)+'×'; renderCards(); renderShoot(); renderLines(); renderRank(); });
 }
 
 // ---- shootout tab: one row per game, sorted by scoring potential
@@ -363,6 +378,70 @@ document.querySelectorAll('[data-ssort]').forEach(b => b.addEventListener('click
   soSort = b.dataset.ssort; renderShoot();
 }));
 $('#so-lined').addEventListener('click', e => { soLined=!soLined; e.currentTarget.setAttribute('aria-pressed', soLined); renderShoot(); });
+
+// ---- line moves tab: opener vs the number at this build, with the trail across builds
+let lmSort='tmove', lmHide=false;
+const lineTxt = (g, sp) => sp==null ? '—' : sp===0 ? 'PK' : sp<0 ? `${g.home.abbr} ${fmt(sp,1)}` : `${g.away.abbr} -${fmt(sp,1)}`;
+const tsFmt = t => new Date(t).toLocaleString('en-US',{weekday:'short',hour:'numeric',timeZone:'America/Chicago'});
+function renderLines(){
+  const op = B.opener, bs = op.by_season;
+  const pooled3 = hitAt(op.pooled_totals.hits_vs_open,3), hold3 = hitAt(op.holdout_totals.hits_vs_open,3);
+  const sp5 = hitAt(op.pooled_spreads.hits_vs_open,5), sph5 = hitAt(op.holdout_spreads.hits_vs_open,5);
+  const twLo = Math.min(...bs.map(r=>r.toward_model)), twHi = Math.max(...bs.map(r=>r.toward_model));
+  $('#lm-caveat').innerHTML = `
+<p><b>What this shows.</b> For every game: the <b>opener</b> (the first number ESPN's archive has for the book shown on the card, usually posted Sunday night), the <b>current</b> number at the time this page was built, the move between them, and this model's projection beside both. The trail column lists the number each build of this week saw (Tue / Thu / Sat), so a line that drifts across the week is visible at a glance. Games that have kicked off keep their last pre-game number.</p>
+<p><b>What movement has meant.</b> Across every season with openers on file, the closing line moved <i>toward</i> this model's number <span class="k">${pct(twLo)}–${pct(twHi)}</span> of the time it moved (${bs.map(r=>`${r.season} ${pct(r.toward_model)}`).join(' · ')}). Betting the opener when the model sat 3+ points off it went <span class="k">${pct(pooled3.hit)}</span> on totals pooled (n=${pooled3.n.toLocaleString()}) but <span class="k">${pct(hold3.hit)}</span> in the untouched 2025 season (n=${hold3.n}); spreads at 5+ were <span class="k">${pct(sp5.hit)}</span> pooled and <span class="k">${pct(sph5.hit)}</span> in 2025 (n=${sph5.n}). Read a <span class="pill flat">toward model</span> tag as the market having already done what the model expected — the number has moved and that value is gone — and a big move <i>away</i> from the model as information the model does not have (injuries, weather, a quarterback). Neither is a pick.</p>`;
+
+  const rows = DATA.games.map(g => {
+    const c = compute(g), L = g.lines || {};
+    const ot = L.open_total, ct = L.cur_total ?? g.mkt_total, os = L.open_spread, cs = L.cur_spread ?? g.mkt_spread;
+    const tmove = (ot!=null && ct!=null) ? ct - ot : null;
+    const smove = (os!=null && cs!=null) ? cs - os : null;         // home-perspective: negative = moved toward the home side
+    const mopen = (ot!=null) ? c.total - ot : null;
+    const openMargin = os==null ? null : -os, curMargin = cs==null ? null : -cs;
+    const tToward = (tmove==null || tmove===0 || mopen==null) ? null : Math.sign(tmove)===Math.sign(mopen);
+    const sToward = (smove==null || smove===0 || openMargin==null) ? null : Math.sign(curMargin-openMargin)===Math.sign(c.margin-openMargin);
+    return {g, c, ot, ct, os, cs, tmove, smove, mopen, sToward, tToward};
+  }).filter(r => !lmHide || !r.g.completed).filter(r => r.ct!=null || r.cs!=null);
+  const keyf = {tmove: r => r.tmove==null ? 1e9 : -Math.abs(r.tmove), smove: r => r.smove==null ? 1e9 : -Math.abs(r.smove),
+                mopen: r => r.mopen==null ? 1e9 : -Math.abs(r.mopen), kick: r => new Date(r.g.date).getTime()}[lmSort];
+  rows.sort((x,y)=>keyf(x)-keyf(y));
+  const toward = v => v==null ? '' : v ? '<span class="pill flat">toward model</span>' : '<span class="pill flat" style="color:var(--ink2)">away from model</span>';
+  const head = `<thead><tr><th class="l">#</th><th class="l">Matchup</th><th class="l">Kickoff</th>
+    <th class="sep">Opener total</th><th>Now</th><th>Move</th><th>Model total</th><th>Model vs opener</th><th class="l"></th>
+    <th class="sep">Opener line</th><th>Now</th><th>Move</th><th>Model line</th><th class="l"></th><th class="sep l">Trail (each build)</th></tr></thead>`;
+  const body = '<tbody>' + rows.map((r,i) => {
+    const {g,c} = r;
+    const smoveTxt = r.smove==null ? '—' : r.smove===0 ? '0' : `→ ${r.smove<0?g.home.abbr:g.away.abbr} ${fmt(Math.abs(r.smove),1)}`;
+    const mopenPill = r.mopen==null ? '—' : Math.abs(r.mopen)<3 ? `<span style="color:var(--ink3)">${sgn(r.mopen)}</span>` : cell(r.mopen, 6);
+    const trail = (g.lines && g.lines.trail && g.lines.trail.length) ? g.lines.trail.map(p=>`${tsFmt(p.t)} <b>${p.total!=null?fmt(p.total,1):'—'}</b>/${lineTxt(g,p.spread)}`).join(' → ') : '—';
+    return `<tr>
+      <td class="l" style="color:var(--ink3)">${i+1}</td>
+      <td class="mu">${g.away.abbr} at ${g.home.abbr}<small>${g.away.name} at ${g.home.name}${g.neutral?' · neutral':''}${g.completed?` · <span class="pill flat">final ${g.away_pts}–${g.home_pts}</span>`:''}</small></td>
+      <td class="l" style="color:var(--ink2);font-family:'IBM Plex Sans',sans-serif;font-size:12px">${kickoffFmt(g.date)}</td>
+      <td class="sep" style="color:var(--ink2)">${r.ot!=null?fmt(r.ot,1):'—'}</td>
+      <td><b>${r.ct!=null?fmt(r.ct,1):'—'}</b></td>
+      <td>${r.tmove==null?'—':Math.abs(r.tmove)<0.01?'<span style="color:var(--ink3)">0</span>':cell(r.tmove,4)}</td>
+      <td>${fmt(c.total,1)}</td>
+      <td>${mopenPill}</td>
+      <td class="l">${toward(r.tToward)}</td>
+      <td class="sep" style="color:var(--ink2)">${lineTxt(g,r.os)}</td>
+      <td><b>${lineTxt(g,r.cs)}</b></td>
+      <td style="font-weight:${r.smove!=null&&Math.abs(r.smove)>=3?'600':'400'}">${smoveTxt}</td>
+      <td>${c.margin>0?g.home.abbr:g.away.abbr} -${fmt(Math.abs(c.margin),1)}</td>
+      <td class="l">${toward(r.sToward)}</td>
+      <td class="sep l" style="color:var(--ink2);font-family:'IBM Plex Sans',sans-serif;font-size:12px;white-space:nowrap">${trail}</td>
+    </tr>`;
+  }).join('') + '</tbody>';
+  const hidden = DATA.games.filter(g=>g.completed).length;
+  $('#lmtable').innerHTML = head + body + (rows.length ? '' : '<caption style="padding:10px;color:var(--ink3)">No lines posted yet for this week — openers usually appear Sunday night.</caption>') +
+    (lmHide && hidden ? `<caption style="caption-side:bottom;text-align:left;padding:6px 8px;font-size:12px;color:var(--ink3)">${hidden} game${hidden>1?'s':''} already played hidden.</caption>` : '');
+}
+document.querySelectorAll('[data-lsort]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-lsort]').forEach(x => x.setAttribute('aria-pressed', x===b));
+  lmSort = b.dataset.lsort; renderLines();
+}));
+$('#lm-hide').addEventListener('click', e => { lmHide=!lmHide; e.currentTarget.setAttribute('aria-pressed', lmHide); renderLines(); });
 
 // ---- rankings
 let rankKey='strength', rankDir=-1;
@@ -519,10 +598,10 @@ function renderBT(){
 // ---- tabs
 document.querySelectorAll('nav [role=tab]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('nav [role=tab]').forEach(x => x.setAttribute('aria-selected', x===b));
-  for (const v of ['week','shootout','rank','bt']) $('#view-'+v).hidden = (v!==b.dataset.view);
+  for (const v of ['week','shootout','lines','rank','bt']) $('#view-'+v).hidden = (v!==b.dataset.view);
 }));
 $('#foot').innerHTML = `Fit: points = league avg (${fmt(MU.pts,1)}) + ${fmt(C.const,2)} + ${fmt(C.O_pts,2)}×offense pts rating + ${fmt(C.D_pts,2)}×opponent defense allows + ${fmt(C.O_sr,1)}×offense success + ${fmt(C.D_sr,1)}×defense success allowed + ${fmt(C.O_xr,1)}×offense explosive + ${fmt(C.D_xr,1)}×defense explosive allowed + ${fmt(C.home_adj,2)}×home + ${fmt(C.blow_fav||0,2)}×(rating margin beyond +21) + ${fmt(C.blow_dog||0,2)}×(rating margin beyond −21). Ratings as of ${DATA.season} week ${DATA.week} (λ=${DATA.hyper.lam}, carryover ${DATA.hyper.c}, fade ${DATA.hyper.rho}/week). Source: ESPN public endpoints. Not a betting recommendation — see the Backtest tab for what has and has not been demonstrated.`;
-renderCards(); renderShoot(); renderRank(); renderBT();
-matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { renderCards(); renderShoot(); renderRank(); });
+renderCards(); renderShoot(); renderLines(); renderRank(); renderBT();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { renderCards(); renderShoot(); renderLines(); renderRank(); });
 })();
 </script>

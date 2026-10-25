@@ -112,7 +112,7 @@ as 2026 games are played):
 | `ncaaf_overs.py` | `games: 7646 \| base over rate train 0.492 holdout 0.489` |
 | `ncaaf_shootcal.py` | `n=6910`; bucket 0–20 over 51.8%; bucket 90–101 over 44.3% |
 | `build_ncaaf_board.py` (2026 season) | `coef: const 0.547, O_pts 0.632, D_pts 0.745, O_sr 32.645, D_sr 20.877, O_xr 22.402, D_xr 18.849, home_adj 2.673, blow_fav 0.172, blow_dog 0.133` |
-| `tests/smoke.js` | 56 cards (wk 8), 44 Shootout rows, 138 ranking rows, 7 backtest sections, `no errors` |
+| `tests/smoke.js` | 56 cards (wk 8), 44 Shootout rows, 56 line-move rows, 138 ranking rows, 7 backtest sections, `no errors` |
 
 (The research-only scripts, when run by hand: `ncaaf_minpts.py` → `corr(mkt_dog, minp) 0.4084`; `ncaaf_floor.py` → `games 7625 | SD 16.29 skew 0.35`; `ncaaf_bothfloor.py` → `n=7623 | base P(both>20)=0.443`; `ncaaf_bigfav.py` → `SD: spread 15.84 | favourite team total 12.07 | dog team total 10.01`.)
 
@@ -237,7 +237,7 @@ One self-contained HTML file (`ncaaf_board_template.html`, ~78 KB + baked JSON �
 step, no framework, no server. Data is injected at the literal `/*DATA*/{}` by `render_ncaaf_board.py`.
 
 **Header:** sticky; title "NCAAF Matchup Scores"; subline `season · Week N · N games · built <time> CT`;
-four tabs.
+five tabs.
 
 **Tab 1 — This week.** Caveat block (see §7), controls, weight sliders, legend, then one card per game.
 - Sort buttons: Spread gap · Combined total · Edge vs posted total · Edge vs posted spread · Shootout ·
@@ -257,11 +257,23 @@ Sorts: Shootout · Kickoff. Toggle "only games with a posted total". The caveat 
 the over rate of the top vs bottom Shootout bucket (from `shoot_calibration.json`) so the ranking is
 never read as an over signal.
 
-**Tab 3 — Rankings.** Every FBS team's current ratings, sortable by any column (strength, offense pts,
+**Tab 3 — Line moves** (added Oct 25 2026 at John's request). One row per game with a line: opener total
+→ current total with the move (red up / blue down), model total, model vs opener (coloured at 3+), a
+`toward model` / `away from model` tag; the same for the spread (move shown as "→ TEAM x.x"); and a
+**trail** of the number each build of the week saw (Tue / Thu / Sat, from `docs/history/`). Sorts:
+Biggest total move · Biggest spread move · Model vs opener · Kickoff. Toggle: hide games already played.
+Data: `build_ncaaf_board.py` calls the ESPN odds archive for every slate game (`line_archive()`: open /
+current per book, validated like close lines, provider = the one the scoreboard shows, else the close
+priority list) and reads earlier builds' lines from `docs/history/board_*.json` (`history_trail()`). The
+same archive call is what now **keeps a game's line after kickoff** (Phase 4 item 5, done). The caveat
+prints the line-move agreement by season and the model-vs-opener record, pooled and 2025, and says that
+`toward model` means the value has already been taken. Never style it as a pick.
+
+**Tab 4 — Rankings.** Every FBS team's current ratings, sortable by any column (strength, offense pts,
 success, explosive, tempo, defense allows, success/explosive allowed, run/pass offense and defense,
 pass rate, raw PPG/PA).
 
-**Tab 4 — Backtest.** Sections 1–7 in plain English with tables and small inline-SVG charts: does it
+**Tab 5 — Backtest.** Sections 1–7 in plain English with tables and small inline-SVG charts: does it
 predict the game; what predicts points; recent form / tempo / turnover luck; does it beat the closer;
 opener & line movement; method; overs.
 
@@ -363,10 +375,8 @@ Confirm with John that a public URL is OK first.
    posted *total* (today only spread disagreement and 28+ favourites are flagged).
 3. **Big-favourite panel** from `ncaaf_bigfav.py`: for favourites −14 or bigger, show the team-total
    route (favourite over implied total − k) next to the spread route, with clear rates and fair prices.
-4. **Line-move tracker:** snapshot lines at each run (Tue/Thu/Sat) into history and show the move since
-   Tuesday per game, with whether it moved toward the model (the one stable signal).
-5. **Keep lines through kickoff:** when the live scoreboard has no odds, fall back to the odds archive's
-   `current`/`close` for that game.
+4. ~~Line-move tracker~~ — done Oct 25 2026 (Tab 3).
+5. ~~Keep lines through kickoff~~ — done Oct 25 2026 (archive fallback in `build_ncaaf_board.py`).
 6. **Mobile pass:** card tables are wide (min-width ~980 px) — consider a stacked layout under 600 px.
 7. **Book-pricing check:** if John supplies his book's alt-total prices for a few games at different
    total levels, add them so the flat-pricing assumption can be tested instead of assumed.

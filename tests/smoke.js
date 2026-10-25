@@ -17,6 +17,12 @@ const { chromium } = require('playwright');
   const top = await p.$$eval('#sotable tbody tr', rs => rs.slice(0,6).map(r => [...r.querySelectorAll('td')].map(t => t.innerText.split('\n')[0]).filter(Boolean).join(' | ')));
   console.log('--- shootout, top 6 ---'); top.forEach(t => console.log('  ' + t));
   await p.click('[data-ssort="kick"]'); await p.waitForTimeout(200);
+  await p.click('nav [data-view="lines"]'); await p.waitForTimeout(300);
+  console.log('line-move rows:', await p.$$eval('#lmtable tbody tr', r => r.length));
+  const lm = await p.$$eval('#lmtable tbody tr', rs => rs.slice(0,5).map(r => [...r.querySelectorAll('td')].map(t => t.innerText.split('\n')[0]).filter(Boolean).join(' | ')));
+  console.log('--- biggest total moves, top 5 ---'); lm.forEach(t => console.log('  ' + t));
+  for (const s of ['smove','mopen','kick']) { await p.click(`[data-lsort="${s}"]`); await p.waitForTimeout(120); }
+  await p.click('#lm-hide'); await p.waitForTimeout(120);
   await p.click('nav [data-view="rank"]'); await p.waitForTimeout(200);
   console.log('ranking rows:', await p.$$eval('#ranktable tbody tr', r => r.length));
   await p.click('nav [data-view="bt"]'); await p.waitForTimeout(300);

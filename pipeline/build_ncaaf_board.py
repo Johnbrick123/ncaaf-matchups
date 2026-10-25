@@ -29,6 +29,10 @@ DATA = os.path.join(BASE, "data")
 sys.path.insert(0, BASE)
 from ncaaf_ratings import load_teamgames, RatingEngine, STATS, add_raw_baselines  # noqa: E402
 from ncaaf_backtest import load as load_eval, fit_ols, FEATURE_SETS, SCORE_MODEL  # noqa: E402
+from ncaaf_pull import compact_odds_item, get_json, CORE  # noqa: E402
+from ncaaf_features import CLOSE_PRIORITY  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
+import glob  # noqa: E402
 
 LAM, C, RHO = 2.0, 0.75, 0.9
 SITE = "https://site.api.espn.com/apis/site/v2/sports/football/college-football"
@@ -83,6 +87,77 @@ def live_scoreboard(season, week):
                         "home_rank": home.get("curatedRank", {}).get("current"), "away_rank": away.get("curatedRank", {}).get("current"),
                         "home_record": (home.get("records") or [{}])[0].get("summary"), "away_record": (away.get("records") or [{}])[0].get("summary")}
     return out
+
+
+def line_archive(game_ids, preferred=None):
+    """Opening and current lines for upcoming games from ESPN's odds archive (one call per game).
+    Returns {game_id: {open_total, open_spread, cur_total, cur_spread, provider}} — spreads are
+    home-perspective (negative = home favoured), the same convention as the rest of the pipeline.
+    Open/current blocks are validated the way ncaaf_features.py validates close lines, because ESPN
+    has stored odds (-110) in those fields before."""
+    preferred = preferred or {}
+
+    def ok_total(x, ref):
+        return x is not None and 20 <= x <= 110 and (ref is None or abs(x - ref) <= 12)
+
+    def ok_spread(x, ref):
+        return x is not None and abs(x) <= 70 and (ref is None or abs(abs(x) - abs(ref)) <= 10)
+
+    def one(gid):
+        try:
+            d = get_json(f"{CORE}/events/{gid}/competitions/{gid}/odds", tries=3, timeout=30)
+        except Exception:  # noqa
+            return gid, None
+        if not d:
+            return gid, None
+        items = [compact_odds_item(it) for it in d.get("items", [])]
+        by = {}
+        for it in items:
+            by.setdefault(it.get("provider"), it)
+        order = ([preferred.get(gid)] if preferred.get(gid) else []) + CLOSE_PRIORITY
+        out = {"open_total": None, "open_spread": None, "cur_total": None, "cur_spread": None,
+               "provider": None, "spread_provider": None, "n_books": len(by)}
+        for pv in order:
+            o = by.get(pv)
+            if not o:
+                continue
+            ou = o.get("overUnder") if ok_total(o.get("overUnder"), None) else None
+            cur = o.get("current_total") if ok_total(o.get("current_total"), ou) else ou
+            opn = o.get("open_total") if ok_total(o.get("open_total"), cur) else None
+            if cur is not None and out["cur_total"] is None:
+                out["cur_total"], out["open_total"], out["provider"] = cur, opn, pv
+            sp = o.get("spread") if ok_spread(o.get("spread"), None) else None
+            cs = o.get("current_home_spread") if ok_spread(o.get("current_home_spread"), sp) else sp
+            os_ = o.get("open_home_spread") if ok_spread(o.get("open_home_spread"), cs) else None
+            if cs is not None and out["cur_spread"] is None:
+                out["cur_spread"], out["open_spread"], out["spread_provider"] = cs, os_, pv
+            if out["cur_total"] is not None and out["cur_spread"] is not None:
+                break
+        return gid, out
+
+    res = {}
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for gid, out in ex.map(one, game_ids):
+            if out:
+                res[gid] = out
+    return res
+
+
+def history_trail(season, week):
+    """Lines recorded by earlier builds of this same week (docs/history/board_<date>.json)."""
+    trail = {}
+    for path in sorted(glob.glob(os.path.join(BASE, "..", "docs", "history", "board_*.json"))):
+        try:
+            d = json.load(open(path))
+        except Exception:  # noqa
+            continue
+        if d.get("season") != season or d.get("week") != week:
+            continue
+        for g in d.get("games", []):
+            if g.get("mkt_total") is None and g.get("mkt_spread") is None:
+                continue
+            trail.setdefault(g["game_id"], []).append({"t": d["built_at"], "total": g.get("mkt_total"), "spread": g.get("mkt_spread")})
+    return trail
 
 
 def main(season=None, week=None, do_refresh=True):
@@ -210,8 +285,14 @@ def main(season=None, week=None, do_refresh=True):
                  "model_ats": float((np.sign(big.proj_margin - big.mkt_margin) == np.sign(big.margin - big.mkt_margin))[big.margin != big.mkt_margin].mean())}
 
     live = live_scoreboard(season, week)
-    rows = []
     slate = cur[(cur.week == week) & cur.home_fbs & cur.away_fbs]
+    gids = [str(x) for x in slate.game_id]
+    arch = line_archive(gids, preferred={g: (live.get(g) or {}).get("provider") for g in gids})
+    trail = history_trail(season, week)
+    print(f"line archive: {sum(1 for a in arch.values() if a['cur_total'] is not None)} of {len(gids)} games with a current total, "
+          f"{sum(1 for a in arch.values() if a['open_total'] is not None)} with an opener; history builds this week: "
+          f"{len({p['t'] for ps in trail.values() for p in ps})}")
+    rows = []
     for _, r in slate.iterrows():
         hk, ak = str(r.home_id), str(r.away_id)
         th, ta = team_block(hk), team_block(ak)
@@ -223,6 +304,18 @@ def main(season=None, week=None, do_refresh=True):
             tot = float(r.live_total)
         if spr is None and pd.notna(r.get("live_spread")):
             spr = float(r.live_spread)
+        a = arch.get(str(r.game_id)) or {}
+        provider = lv.get("provider")
+        # keep the line through kickoff: the live scoreboard drops odds once a game starts, the archive does not
+        if tot is None and a.get("cur_total") is not None:
+            tot, provider = a["cur_total"], a.get("provider")
+        if spr is None and a.get("cur_spread") is not None:
+            spr = a["cur_spread"]
+        pts = trail.get(str(r.game_id), [])
+        if tot is not None or spr is not None:
+            pts = pts + [{"t": now.isoformat(), "total": tot, "spread": spr}]
+        lines = {"open_total": a.get("open_total"), "open_spread": a.get("open_spread"),
+                 "cur_total": tot, "cur_spread": spr, "provider": a.get("provider"), "trail": pts}
         rush_edge = (th["O_rush"] + ta["D_rush"]) + (ta["O_rush"] + th["D_rush"])
         pass_edge = (th["O_pass"] + ta["D_pass"]) + (ta["O_pass"] + th["D_pass"])
         exp_total = ph + pa
@@ -235,7 +328,7 @@ def main(season=None, week=None, do_refresh=True):
             "venue": r.venue, "completed": bool(r.completed), "status": lv.get("status"), "tv": lv.get("broadcast"),
             "home": {**th, "proj": ph, "contrib": ch, "rank": lv.get("home_rank"), "record": lv.get("home_record")},
             "away": {**ta, "proj": pa, "contrib": ca, "rank": lv.get("away_rank"), "record": lv.get("away_record")},
-            "mkt_total": tot, "mkt_spread": spr, "mkt_provider": lv.get("provider"),
+            "mkt_total": tot, "mkt_spread": spr, "mkt_provider": provider, "lines": lines,
             "home_pts": (None if pd.isna(r.home_pts) else int(r.home_pts)),
             "away_pts": (None if pd.isna(r.away_pts) else int(r.away_pts)),
         })

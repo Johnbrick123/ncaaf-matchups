@@ -22,5 +22,7 @@ change.** Research history: `reference/ncaaf-matchup-runbook.md`.
 - Spreads are home-perspective: negative = home favoured. Market implied: home (T−S)/2, away (T+S)/2.
 - Any projection of a past week must use that week's as-of league average (`mu_pts`), never today's.
 - Everything in `pipeline/data/` is generated; nothing there is committed.
-- Build before kickoff — ESPN drops a game's odds from the live scoreboard once it starts.
+- Build before kickoff — ESPN drops a game's odds from the live scoreboard once it starts (the build
+  falls back to the odds archive's current number, but new lines only post before kickoff).
+- Line moves tab: `toward model` means the market already moved; never present a move as a pick.
 - Colour: red = pushes points up, blue = pushes points down, gray = average; every coloured cell prints its number.
